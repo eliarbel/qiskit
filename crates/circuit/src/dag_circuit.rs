@@ -1044,7 +1044,7 @@ def _format(operand):
             }
 
             if self.qubits.find(bit).is_some() {
-                return Err(DAGCircuitError::new_err(format!("duplicate qubit {}", bit)));
+                return Err(DAGCircuitError::new_err(format!("duplicate qubits {}", bit)));
             }
         }
 
@@ -1063,7 +1063,7 @@ def _format(operand):
             }
 
             if self.clbits.find(bit).is_some() {
-                return Err(DAGCircuitError::new_err(format!("duplicate clbit {}", bit)));
+                return Err(DAGCircuitError::new_err(format!("duplicate clbits {}", bit)));
             }
         }
 
@@ -3066,7 +3066,7 @@ def _format(operand):
             }
         };
 
-        let var_iter = self.iter_vars(py)?;
+        let var_iter = input_dag.iter_vars(py)?;
         let raw_set = BUILTIN_SET.get_bound(py).call1((var_iter,))?;
         let input_dag_var_set: &Bound<PySet> = raw_set.downcast()?;
 
