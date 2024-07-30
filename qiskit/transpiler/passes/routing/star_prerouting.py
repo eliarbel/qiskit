@@ -15,10 +15,10 @@ from typing import Iterable, Union, Optional, List, Tuple
 from math import floor, log10
 
 from qiskit.circuit import Barrier
-from qiskit.dagcircuit import DAGOpNode, DAGDepNode, DAGDependency, DAGCircuit
-from qiskit.transpiler import Layout
-from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.circuit.library import SwapGate
+from qiskit.dagcircuit import DAGOpNode, DAGDepNode, DAGDependency, DAGCircuit
+from qiskit.transpiler.basepasses import TransformationPass
+from qiskit.transpiler.layout import Layout
 
 
 class StarBlock:
@@ -335,7 +335,7 @@ class StarPreRouting(TransformationPass):
         }
 
         def tie_breaker_key(node):
-            return processing_order_index_map.get(node, node.sort_key)
+            return processing_order_index_map.get(node, node.sort_key or "")
 
         for node in dag.topological_op_nodes(key=tie_breaker_key):
             block_id = node_to_block_id.get(node, None)

@@ -28,6 +28,46 @@ from qiskit.exceptions import InvalidFileError
 from .exceptions import VisualizationError
 
 
+IMAGE_TYPES = {
+    "canon",
+    "cmap",
+    "cmapx",
+    "cmapx_np",
+    "dia",
+    "dot",
+    "fig",
+    "gd",
+    "gd2",
+    "gif",
+    "hpgl",
+    "imap",
+    "imap_np",
+    "ismap",
+    "jpe",
+    "jpeg",
+    "jpg",
+    "mif",
+    "mp",
+    "pcl",
+    "pdf",
+    "pic",
+    "plain",
+    "plain-ext",
+    "png",
+    "ps",
+    "ps2",
+    "svg",
+    "svgz",
+    "vml",
+    "vmlz",
+    "vrml",
+    "vtx",
+    "wbmp",
+    "xdor",
+    "xlib",
+}
+
+
 @_optionals.HAS_GRAPHVIZ.require_in_call
 @_optionals.HAS_PIL.require_in_call
 def dag_drawer(dag, scale=0.7, filename=None, style="color"):
@@ -51,6 +91,8 @@ def dag_drawer(dag, scale=0.7, filename=None, style="color"):
     Raises:
         VisualizationError: when style is not recognized.
         InvalidFileError: when filename provided is not valid
+        ValueError: If the file extension for ``filename`` is not an image
+            type supported by Graphviz.
 
     Example:
         .. plot::
@@ -178,10 +220,13 @@ def dag_drawer(dag, scale=0.7, filename=None, style="color"):
                         label = register_bit_labels.get(
                             node.wire, f"q_{dag.find_bit(node.wire).index}"
                         )
-                    else:
+                    elif isinstance(node.wire, Clbit):
                         label = register_bit_labels.get(
                             node.wire, f"c_{dag.find_bit(node.wire).index}"
                         )
+                    else:
+                        label = str(node.wire.name)
+
                     n["label"] = label
                     n["color"] = "black"
                     n["style"] = "filled"
@@ -191,10 +236,12 @@ def dag_drawer(dag, scale=0.7, filename=None, style="color"):
                         label = register_bit_labels.get(
                             node.wire, f"q[{dag.find_bit(node.wire).index}]"
                         )
-                    else:
+                    elif isinstance(node, Clbit):
                         label = register_bit_labels.get(
                             node.wire, f"c[{dag.find_bit(node.wire).index}]"
                         )
+                    else:
+                        label = str(node.wire.name)
                     n["label"] = label
                     n["color"] = "black"
                     n["style"] = "filled"
@@ -207,8 +254,10 @@ def dag_drawer(dag, scale=0.7, filename=None, style="color"):
             e = {}
             if isinstance(edge, Qubit):
                 label = register_bit_labels.get(edge, f"q_{dag.find_bit(edge).index}")
-            else:
+            elif isinstance(edge, Clbit):
                 label = register_bit_labels.get(edge, f"c_{dag.find_bit(edge).index}")
+            else:
+                label = str(edge.name)
             e["label"] = label
             return e
 
@@ -217,6 +266,12 @@ def dag_drawer(dag, scale=0.7, filename=None, style="color"):
         if "." not in filename:
             raise InvalidFileError("Parameter 'filename' must be in format 'name.extension'")
         image_type = filename.split(".")[-1]
+        if image_type not in IMAGE_TYPES:
+            raise ValueError(
+                "The specified value for the image_type argument, "
+                f"'{image_type}' is not a valid choice. It must be one of: "
+                f"{IMAGE_TYPES}"
+            )
 
     dot_str = dag._to_dot(
         graph_attrs,
