@@ -16,8 +16,14 @@ use std::sync::OnceLock;
 use pyo3::intern;
 use pyo3::prelude::*;
 
-use crate::circuit_data::{CircuitData, CircuitVar};
+use crate::circuit_data::CircuitData;
+use crate::circuit_data::CircuitStretchType;
+use crate::circuit_data::CircuitVarType;
+use crate::classical::expr;
 use crate::dag_circuit::DAGIdentifierInfo;
+use crate::dag_circuit::DAGStretchInfo;
+use crate::dag_circuit::DAGStretchType;
+use crate::dag_circuit::DAGVarType;
 use crate::dag_circuit::{DAGCircuit, NodeType};
 use crate::operations::{OperationRef, PythonOperation};
 use crate::packed_instruction::PackedInstruction;
@@ -51,12 +57,24 @@ pub fn circuit_to_dag(
     qubit_order: Option<Vec<Bound<PyAny>>>,
     clbit_order: Option<Vec<Bound<PyAny>>>,
 ) -> PyResult<DAGCircuit> {
-    DAGCircuit::from_circuit(quantum_circuit, copy_operations, qubit_order, clbit_order)
+
+    DAGCircuit::from_circuit(
+        py,
+        quantum_circuit,
+        copy_operations,
+        qubit_order,
+        clbit_order,
+    )
 }
 
 #[pyfunction(signature = (dag, copy_operations = true))]
-pub fn dag_to_circuit(dag: &DAGCircuit, copy_operations: bool) -> PyResult<CircuitData> {
-    CircuitData::from_packed_instructions(
+pub fn dag_to_circuit(
+    py: Python,
+    dag: &DAGCircuit,
+    copy_operations: bool,
+) -> PyResult<CircuitData> {
+    let mut res = CircuitData::from_packed_instructions(
+        py,
         dag.qubits().clone(),
         dag.clbits().clone(),
         dag.qargs_interner().clone(),
@@ -100,23 +118,29 @@ pub fn dag_to_circuit(dag: &DAGCircuit, copy_operations: bool) -> PyResult<Circu
             }
         }),
         dag.get_global_phase(),
-        dag.identifiers() // Map and pass DAGCircuit variables and stretches to CircuitData style
-            .map(|identifier| match identifier {
-                DAGIdentifierInfo::Stretch(dag_stretch_info) => CircuitVar::Stretch(
-                    dag.get_stretch(dag_stretch_info.get_stretch())
-                        .expect("Stretch not found for the specified index")
-                        .clone(),
-                    dag_stretch_info.get_type().into(),
-                ),
-                DAGIdentifierInfo::Var(dag_var_info) => CircuitVar::Var(
-                    dag.get_var(dag_var_info.get_var())
-                        .expect("Var not found for the specified index")
-                        .clone(),
-                    dag_var_info.get_type().into(),
-                ),
-            })
-            .collect::<Vec<CircuitVar>>(),
-    )
+    )?;
+
+    for identifier in dag.identifiers() {
+        match identifier { // TODO: add proper error handling here (the add functions can return Err)
+            DAGIdentifierInfo::Stretch(dag_stretch_info) => {res.add_stretch(
+                dag.get_stretch(*dag_stretch_info.get_stretch()).unwrap().clone(),
+                match dag_stretch_info.get_type() {
+                    DAGStretchType::Capture => CircuitStretchType::Capture,
+                    DAGStretchType::Declare => CircuitStretchType::Declare,
+                    }
+                );},
+            DAGIdentifierInfo::Var(dag_var_info) => {res.add_var(
+                dag.get_var(*dag_var_info.get_var()).unwrap().clone(),
+                match dag_var_info.get_type() {
+                    DAGVarType::Input => CircuitVarType::Input,
+                    DAGVarType::Capture => CircuitVarType::Capture,
+                    DAGVarType::Declare => CircuitVarType::Declare,
+                }
+                );},
+        }
+    }
+
+    Ok(res)
 }
 
 pub fn converters(m: &Bound<PyModule>) -> PyResult<()> {

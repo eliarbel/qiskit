@@ -385,13 +385,13 @@ impl DAGVarInfo {
     }
 
     #[inline(always)]
-    pub fn get_var(&self) -> Var {
-        self.var
+    pub fn get_var(&self) -> &Var {
+        &self.var
     }
 
     #[inline(always)]
-    pub fn get_type(&self) -> DAGVarType {
-        self.type_
+    pub fn get_type(&self) -> &DAGVarType {
+        &self.type_
     }
 }
 
@@ -434,13 +434,13 @@ impl DAGStretchInfo {
     }
 
     #[inline(always)]
-    pub fn get_stretch(&self) -> Stretch {
-        self.stretch
+    pub fn get_stretch(&self) -> &Stretch {
+        &self.stretch
     }
 
     #[inline(always)]
-    pub fn get_type(&self) -> DAGStretchType {
-        self.type_
+    pub fn get_type(&self) -> &DAGStretchType {
+        &self.type_
     }
 }
 
@@ -4704,7 +4704,7 @@ impl DAGCircuit {
         self.identifier_info.iter().map(|id| id.1)
     }
 
-    /// Returns an iterator over the input variables used by the circuit.
+    /// Returns an iterator over the input variables used by the circuit. // TODO: this can be used in the circuitdata as a comment
     pub fn input_vars(&self) -> impl ExactSizeIterator<Item = &expr::Var> {
         self.vars_input.iter().map(|v| self.vars.get(*v).unwrap())
     }
@@ -6214,16 +6214,6 @@ impl DAGCircuit {
         self.stretches.get(stretch)
     }
 
-    /// Adds a variable to the DAGCircuit.
-    ///
-    /// # Arguments:
-    ///
-    /// * var: the new variable to add.
-    /// * type_: the type the variable should have in the DAGCircuit.
-    ///
-    /// # Returns:
-    ///
-    /// The [Var] index of the stretch in the DAGCircuit.
     fn add_var(&mut self, var: expr::Var, type_: DAGVarType) -> PyResult<Var> {
         // The setup of the initial graph structure between an "in" and an "out" node is the same as
         // the bit-related `_add_wire`, but this logically needs to do different bookkeeping around
@@ -6365,7 +6355,7 @@ impl DAGCircuit {
     pub fn with_capacity(
         num_qubits: usize,
         num_clbits: usize,
-        num_vars: Option<usize>,
+        num_vars: Option<usize>, // TODO: something similar for CircuitData's with_capacity
         num_ops: Option<usize>,
         num_edges: Option<usize>,
         num_stretches: Option<usize>,
