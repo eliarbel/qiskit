@@ -21,7 +21,7 @@ use crate::bit::{
     Register, ShareableClbit, ShareableQubit,
 };
 use crate::bit_locator::BitLocator;
-use crate::circuit_data::{CircuitData, CircuitIdentifierInfo, CircuitStretchType, CircuitVarType};
+use crate::circuit_data::{CircuitData, CircuitVarType, CircuitStretchType};
 use crate::circuit_instruction::{CircuitInstruction, OperationFromPython};
 use crate::classical::expr;
 use crate::converters::QuantumCircuitData;
@@ -6664,8 +6664,7 @@ impl DAGCircuit {
         let num_qubits = qc_data.num_qubits();
         let num_clbits = qc_data.num_clbits();
         let num_ops = qc_data.__len__();
-        let num_vars =
-            qc_data.num_declared_vars() + qc_data.num_input_vars() + qc_data.num_captured_vars();
+        let num_vars = qc_data.num_declared_vars() + qc_data.num_input_vars() + qc_data.num_captured_vars();
         let num_stretches = qc_data.num_declared_stretches() + qc_data.num_captured_stretches();
 
         // Build DAGCircuit with capacity
@@ -6760,28 +6759,25 @@ impl DAGCircuit {
             new_dag.merge_cargs(qc_data.cargs_interner(), |bit| Some(*bit))
         };
 
-        // Add all of the new vars and stretches
-        for identifier in qc_data.identifiers() {
-            match identifier {
-                CircuitIdentifierInfo::Stretch(circuit_stretch_info) => {
-                    new_dag.add_stretch(
-                        qc_data
-                            .get_stretch(circuit_stretch_info.get_stretch())
-                            .expect("Stretch not found for the specified index")
-                            .clone(),
-                        circuit_stretch_info.get_type().into(),
-                    )?;
-                }
-                CircuitIdentifierInfo::Var(circuit_var_info) => {
-                    new_dag.add_var(
-                        qc_data
-                            .get_var(circuit_var_info.get_var())
-                            .expect("Var not found for the specified index")
-                            .clone(),
-                        circuit_var_info.get_type().into(),
-                    )?;
-                }
-            }
+        // Add all of the new vars.
+        for var in qc_data.get_vars(CircuitVarType::Declare) {
+            new_dag.add_var(var.clone(), DAGVarType::Declare)?;
+        }
+
+        for var in qc_data.get_vars(CircuitVarType::Input) {
+            new_dag.add_var(var.clone(), DAGVarType::Input)?;
+        }
+
+        for var in qc_data.get_vars(CircuitVarType::Capture) {
+            new_dag.add_var(var.clone(), DAGVarType::Capture)?;
+        }
+
+        for stretch in qc_data.get_stretches(CircuitStretchType::Capture) {
+            new_dag.add_captured_stretch(stretch.clone())?;
+        }
+
+        for stretch in qc_data.get_stretches(CircuitStretchType::Declare) {
+            new_dag.add_declared_stretch(stretch.clone())?;
         }
 
         // Add all the registers
