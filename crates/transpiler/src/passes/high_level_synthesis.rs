@@ -24,7 +24,7 @@ use pyo3::IntoPyObjectExt;
 use qiskit_circuit::bit::ShareableQubit;
 use qiskit_circuit::circuit_data::{CircuitData, VarsCopyMode};
 use qiskit_circuit::circuit_instruction::OperationFromPython;
-use qiskit_circuit::converters::dag_to_circuit;
+use qiskit_circuit::converters::{dag_to_circuit, circuit_to_dag};
 use qiskit_circuit::converters::QuantumCircuitData;
 use qiskit_circuit::dag_circuit::DAGCircuit;
 use qiskit_circuit::gate_matrix::CX_GATE;
@@ -981,17 +981,7 @@ pub fn run_high_level_synthesis(
         let (output_circuit, _) =
             run_on_circuitdata(py, &circuit, &input_qubits, data, &mut tracker)?;
 
-        // Using this constructor so name and metadata are not lost
-        let new_dag = DAGCircuit::from_circuit(
-            QuantumCircuitData {
-                data: output_circuit,
-                name: dag.get_name().cloned(),
-                metadata: dag.get_metadata().map(|m| m.bind(py)).cloned(),
-            },
-            false,
-            None,
-            None,
-        )?;
+        let new_dag = DAGCircuit::from_circuit_data(py, output_circuit, false)?;
 
         Ok(Some(new_dag))
     }
