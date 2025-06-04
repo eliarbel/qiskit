@@ -34,7 +34,6 @@ use crate::slice::{PySequenceIndex, SequenceIndex};
 use crate::{Clbit, Qubit, Var, Stretch};
 use crate::classical::expr;
 
-use nom::InputTakeAtPosition;
 use numpy::PyReadonlyArray1;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -164,7 +163,7 @@ pub enum CircuitVarType {
 }
 
 #[derive(Clone, Debug)]
-struct CircuitVarInfo {
+pub struct CircuitVarInfo {
     var: Var,
     type_: CircuitVarType,
 }
@@ -190,6 +189,14 @@ impl CircuitVarInfo {
             },
         })
     }
+
+    pub fn get_var(&self) -> Var {
+        self.var
+    }
+
+    pub fn get_type(&self) -> CircuitVarType {
+        self.type_
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -199,7 +206,7 @@ pub enum CircuitStretchType { // TODO: can this be merged with DAGStretchType?
 }
 
 #[derive(Clone, Debug)]
-struct CircuitStretchInfo { // TODO: can this be merged with DAGStretchType?
+pub struct CircuitStretchInfo { // TODO: can this be merged with DAGStretchType?
     stretch: Stretch,
     type_: CircuitStretchType,
 }
@@ -220,11 +227,19 @@ impl CircuitStretchInfo {
             },
         })
     }
+
+    pub fn get_stretch(&self) -> Stretch {
+        self.stretch
+    }
+
+    pub fn get_type(&self) -> CircuitStretchType {
+        self.type_
+    }
 }
 
 
 #[derive(Clone, Debug)]
-enum CircuitIdentifierInfo { // This is stored in identifier_info
+pub enum CircuitIdentifierInfo { // This is stored in identifier_info
     Stretch(CircuitStretchInfo),
     Var(CircuitVarInfo),
 }
@@ -359,7 +374,7 @@ impl CircuitData {
         borrowed_mut.qubit_indices = BitLocator::from_py_dict(&state.2)?;
         borrowed_mut.clbit_indices = BitLocator::from_py_dict(&state.3)?;
 
-        borrowed_mut.identifier_info = IndexMap::<String, CircuitIdentifierInfo>::with_capacity_and_hasher((&state.4).len(), RandomState::default());
+        borrowed_mut.identifier_info = IndexMap::<String, CircuitIdentifierInfo>::with_capacity_and_hasher(state.4.len(), RandomState::default());
         for identifier_info in state.4 {
             let circuit_id_info = CircuitIdentifierInfo::from_pickle(identifier_info.1.bind(py))?;
             match &circuit_id_info {
@@ -383,12 +398,12 @@ impl CircuitData {
             borrowed_mut.identifier_info.insert(identifier_info.0, circuit_id_info);
         }
 
-        borrowed_mut.vars = ObjectRegistry::<Var, expr::Var>::with_capacity((&state.5).len());
+        borrowed_mut.vars = ObjectRegistry::<Var, expr::Var>::with_capacity(state.5.len());
         for var in state.5 {
             borrowed_mut.vars.add(var, false)?;
         }
 
-        borrowed_mut.stretches = ObjectRegistry::<Stretch, expr::Stretch>::with_capacity((&state.6).len());
+        borrowed_mut.stretches = ObjectRegistry::<Stretch, expr::Stretch>::with_capacity(state.6.len());
         for stretch in state.6 {
             borrowed_mut.stretches.add(stretch, false)?;
         }
@@ -1540,7 +1555,7 @@ impl CircuitData {
             return var.into_py_any(py);
         }
 
-        Ok(py.None().into())
+        Ok(py.None())
     }
 
     #[pyo3(name = "get_input_vars")]
@@ -1632,7 +1647,7 @@ impl CircuitData {
             return stretch.into_py_any(py);
         }
 
-        Ok(py.None().into())
+        Ok(py.None())
     }
 
     #[pyo3(name = "get_captured_vars")]
@@ -2400,6 +2415,11 @@ impl CircuitData {
         &self.data
     }
 
+    /// Returns an iterator over the stored identifiers in order of insertion
+    pub fn identifiers(&self) -> impl ExactSizeIterator<Item = &CircuitIdentifierInfo> {
+        self.identifier_info.iter().map(|info| info.1)
+    }
+
     // /// Clone an empty CircuitData from a given reference.
     // ///
     // /// The new copy will have the global properties from the provided `CircuitData`.
@@ -2485,10 +2505,15 @@ impl CircuitData {
             _ => {}
         }
 
-        // TODO: implement checking logic rules here
-        // * cannot add captures to circuits with inputs
-        // * cannot add inputs to circuit with captures
-
+        match type_ {
+            CircuitVarType::Input if !self.vars_captured.is_empty() || !self.stretches_captured.is_empty() => {
+                return Err(CircuitError::new_err("circuits to be enclosed with captures cannot have input variables"));
+            }
+            CircuitVarType::Capture if !self.vars_input.is_empty() => {
+                return Err(CircuitError::new_err("circuits with input variables cannot be enclosed, so cannot be closures"));
+            }
+            _ => {},
+        }
 
         let var_idx = self.vars.add(var, true)?;
         match type_ {
@@ -2518,7 +2543,6 @@ impl CircuitData {
 
 
     pub fn add_stretch(&mut self, stretch: expr::Stretch, type_: CircuitStretchType) -> PyResult<Stretch> {
-        // TODO: implement logic for checking var shadowing rules in this function
         let name = stretch.name.clone();
 
         match self.identifier_info.get(&name) {
@@ -2531,6 +2555,12 @@ impl CircuitData {
                 ));
             }
             _ => {}
+        }
+
+        if let CircuitStretchType::Capture = type_ {
+            if !self.vars_input.is_empty() {
+                return Err(CircuitError::new_err("circuits with input variables cannot be enclosed, so cannot be closures"));
+            }
         }
 
         let stretch_idx = self.stretches.add(stretch, true)?;
@@ -2593,8 +2623,8 @@ impl CircuitData {
                 for info in self.identifier_info.values() {
                     match info {
                         CircuitIdentifierInfo::Stretch(CircuitStretchInfo { stretch, type_ }) => {
-                            let stretch = self.stretches.get(*stretch).unwrap().clone();
-                            res.add_stretch(stretch, *type_);
+                            let stretch = self.stretches.get(*stretch).unwrap().clone(); // TODO: change to expect here and everywhere
+                            res.add_stretch(stretch, *type_)?;
                         }
                         CircuitIdentifierInfo::Var(CircuitVarInfo { var, type_, .. }) => {
                             let var = self.vars.get(*var).unwrap().clone();
@@ -2608,7 +2638,7 @@ impl CircuitData {
                     match info {
                         CircuitIdentifierInfo::Stretch(CircuitStretchInfo { stretch, .. }) => {
                             let stretch = self.stretches.get(*stretch).unwrap().clone();
-                            res.add_stretch(stretch, CircuitStretchType::Capture);
+                            res.add_stretch(stretch, CircuitStretchType::Capture)?;
                         }
                         CircuitIdentifierInfo::Var(CircuitVarInfo { var, .. }) => {
                             let var = self.vars.get(*var).unwrap().clone();

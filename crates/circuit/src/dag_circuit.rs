@@ -21,7 +21,7 @@ use crate::bit::{
     Register, ShareableClbit, ShareableQubit,
 };
 use crate::bit_locator::BitLocator;
-use crate::circuit_data::{CircuitData, CircuitVarType, CircuitStretchType};
+use crate::circuit_data::{CircuitData, CircuitVarType, CircuitStretchType, CircuitIdentifierInfo};
 use crate::circuit_instruction::{CircuitInstruction, OperationFromPython};
 use crate::classical::expr;
 use crate::converters::QuantumCircuitData;
@@ -385,13 +385,13 @@ impl DAGVarInfo {
     }
 
     #[inline(always)]
-    pub fn get_var(&self) -> &Var {
-        &self.var
+    pub fn get_var(&self) -> Var {
+        self.var
     }
 
     #[inline(always)]
-    pub fn get_type(&self) -> &DAGVarType {
-        &self.type_
+    pub fn get_type(&self) -> DAGVarType {
+        self.type_
     }
 }
 
@@ -434,13 +434,13 @@ impl DAGStretchInfo {
     }
 
     #[inline(always)]
-    pub fn get_stretch(&self) -> &Stretch {
-        &self.stretch
+    pub fn get_stretch(&self) -> Stretch {
+        self.stretch
     }
 
     #[inline(always)]
-    pub fn get_type(&self) -> &DAGStretchType {
-        &self.type_
+    pub fn get_type(&self) -> DAGStretchType {
+        self.type_
     }
 }
 
@@ -6258,16 +6258,6 @@ impl DAGCircuit {
         Ok(var_idx)
     }
 
-    /// Add a stretch variable to the DAGCircuit.
-    ///
-    /// # Arguments:
-    ///
-    /// * stretch: the new stretch to add.
-    /// * type_: the type the stretch should have in the DAGCircuit.
-    ///
-    /// # Returns:
-    ///
-    /// The [Stretch] index of the stretch in the DAGCircuit.
     fn add_stretch(&mut self, stretch: expr::Stretch, type_: DAGStretchType) -> PyResult<Stretch> {
         let name: String = stretch.name.clone();
         match self.identifier_info.get(&name) {
@@ -6286,12 +6276,8 @@ impl DAGCircuit {
 
         let stretch_idx = self.stretches.add(stretch, true)?;
         match type_ {
-            DAGStretchType::Capture => {
-                self.stretches_capture.insert(stretch_idx);
-            }
-            DAGStretchType::Declare => {
-                self.stretches_declare.push(stretch_idx);
-            }
+            DAGStretchType::Capture => {self.stretches_capture.insert(stretch_idx);},
+            DAGStretchType::Declare => {self.stretches_declare.push(stretch_idx);},
         };
         self.identifier_info.insert(
             name,
@@ -6759,25 +6745,27 @@ impl DAGCircuit {
             new_dag.merge_cargs(qc_data.cargs_interner(), |bit| Some(*bit))
         };
 
-        // Add all of the new vars.
-        for var in qc_data.get_vars(CircuitVarType::Declare) {
-            new_dag.add_var(var.clone(), DAGVarType::Declare)?;
-        }
-
-        for var in qc_data.get_vars(CircuitVarType::Input) {
-            new_dag.add_var(var.clone(), DAGVarType::Input)?;
-        }
-
-        for var in qc_data.get_vars(CircuitVarType::Capture) {
-            new_dag.add_var(var.clone(), DAGVarType::Capture)?;
-        }
-
-        for stretch in qc_data.get_stretches(CircuitStretchType::Capture) {
-            new_dag.add_captured_stretch(stretch.clone())?;
-        }
-
-        for stretch in qc_data.get_stretches(CircuitStretchType::Declare) {
-            new_dag.add_declared_stretch(stretch.clone())?;
+        // Add all of the new vars and stretches
+        for identifier in qc_data.identifiers() {
+            match identifier {
+                CircuitIdentifierInfo::Stretch(circuit_stretch_info) => {
+                    new_dag.add_stretch(
+                        qc_data.get_stretch(circuit_stretch_info.get_stretch()).expect("Stretch not found for the specified index").clone(),
+                            match circuit_stretch_info.get_type() {
+                                CircuitStretchType::Capture => DAGStretchType::Capture,
+                                CircuitStretchType::Declare => DAGStretchType::Declare,
+                                }
+                            )?;},
+                CircuitIdentifierInfo::Var(circuit_var_info) => {
+                    new_dag.add_var(
+                    qc_data.get_var(circuit_var_info.get_var()).expect("Var not found for the specified index").clone(),
+                    match circuit_var_info.get_type() {
+                        CircuitVarType::Input => DAGVarType::Input,
+                        CircuitVarType::Capture => DAGVarType::Capture,
+                        CircuitVarType::Declare => DAGVarType::Declare,
+                    }
+                    )?;},
+                }
         }
 
         // Add all the registers
