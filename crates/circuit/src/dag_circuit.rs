@@ -6788,7 +6788,7 @@ impl DAGCircuit {
                             .get_var(circuit_var_info.get_var())
                             .expect("Var not found for the specified index")
                             .clone(),
-                        circuit_var_info.get_type().into()
+                        circuit_var_info.get_type().into(),
                     )?;
                 }
             }
