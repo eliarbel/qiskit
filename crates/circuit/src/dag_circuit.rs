@@ -6664,6 +6664,7 @@ impl DAGCircuit {
 
     /// Alternative constructor to build an instance of [DAGCircuit] from a `QuantumCircuit`.
     pub fn from_circuit(
+        py: Python,
         qc: QuantumCircuitData,
         copy_op: bool,
         qubit_order: Option<Vec<Bound<PyAny>>>,
