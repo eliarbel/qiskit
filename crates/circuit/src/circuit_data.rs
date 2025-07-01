@@ -2529,7 +2529,7 @@ impl CircuitData {
 
     /// Returns an iterator over the stored identifiers in order of insertion
     pub fn identifiers(&self) -> impl ExactSizeIterator<Item = &CircuitIdentifierInfo> {
-        self.identifier_info.iter().map(|info| info.1)
+        self.identifier_info.values()
     }
 
     /// Append a PackedInstruction to the circuit data.
@@ -2560,12 +2560,12 @@ impl CircuitData {
     /// # Arguments:
     ///
     /// * var: the new variable to add.
-    /// * type_: the type the variable should have in the circuit.
+    /// * var_type: the type the variable should have in the circuit.
     ///
     /// # Returns:
     ///
     /// The [Var] index of the variable in the circuit.
-    pub fn add_var(&mut self, var: expr::Var, type_: CircuitVarType) -> PyResult<Var> {
+    pub fn add_var(&mut self, var: expr::Var, var_type: CircuitVarType) -> PyResult<Var> {
         let name = {
             let expr::Var::Standalone { name, .. } = &var else {
                 return Err(CircuitError::new_err(
@@ -2587,7 +2587,7 @@ impl CircuitData {
             _ => {}
         }
 
-        match type_ {
+        match var_type {
             CircuitVarType::Input
                 if !self.vars_capture.is_empty() || !self.stretches_capture.is_empty() =>
             {
@@ -2604,7 +2604,7 @@ impl CircuitData {
         }
 
         let var_idx = self.vars.add(var, true)?;
-        match type_ {
+        match var_type {
             CircuitVarType::Input => &mut self.vars_input,
             CircuitVarType::Capture => &mut self.vars_capture,
             CircuitVarType::Declare => &mut self.vars_declare,
@@ -2615,7 +2615,7 @@ impl CircuitData {
             name,
             CircuitIdentifierInfo::Var(CircuitVarInfo {
                 var: var_idx,
-                type_,
+                type_: var_type,
             }),
         );
         Ok(var_idx)
@@ -2631,9 +2631,9 @@ impl CircuitData {
     ///
     /// # Arguments:
     ///
-    /// type_: the type of variables to return an iterator for.
-    pub fn get_vars(&self, type_: CircuitVarType) -> impl ExactSizeIterator<Item = &expr::Var> {
-        match type_ {
+    /// var_type: the type of variables to return an iterator for.
+    pub fn get_vars(&self, var_type: CircuitVarType) -> impl ExactSizeIterator<Item = &expr::Var> {
+        match var_type {
             CircuitVarType::Input => &self.vars_input,
             CircuitVarType::Capture => &self.vars_capture,
             CircuitVarType::Declare => &self.vars_declare,
@@ -2647,7 +2647,7 @@ impl CircuitData {
     /// # Arguments:
     ///
     /// * stretch: the new stretch to add.
-    /// * type_: the type the stretch should have in the circuit.
+    /// * stretch_type: the type the stretch should have in the circuit.
     ///
     /// # Returns:
     ///
@@ -2655,7 +2655,7 @@ impl CircuitData {
     pub fn add_stretch(
         &mut self,
         stretch: expr::Stretch,
-        type_: CircuitStretchType,
+        stretch_type: CircuitStretchType,
     ) -> PyResult<Stretch> {
         let name = stretch.name.clone();
 
@@ -2673,7 +2673,7 @@ impl CircuitData {
             _ => {}
         }
 
-        if let CircuitStretchType::Capture = type_ {
+        if let CircuitStretchType::Capture = stretch_type {
             if !self.vars_input.is_empty() {
                 return Err(CircuitError::new_err(
                     "circuits with input variables cannot be enclosed, so cannot be closures",
@@ -2682,7 +2682,7 @@ impl CircuitData {
         }
 
         let stretch_idx = self.stretches.add(stretch, true)?;
-        match type_ {
+        match stretch_type {
             CircuitStretchType::Capture => &mut self.stretches_capture,
             CircuitStretchType::Declare => &mut self.stretches_declare,
         }
@@ -2692,7 +2692,7 @@ impl CircuitData {
             name,
             CircuitIdentifierInfo::Stretch(CircuitStretchInfo {
                 stretch: stretch_idx,
-                type_,
+                type_: stretch_type,
             }),
         );
         Ok(stretch_idx)
@@ -2708,12 +2708,12 @@ impl CircuitData {
     ///
     /// # Arguments:
     ///
-    /// type_: the type of stretches to return an iterator for.
+    /// stretch_type: the type of stretches to return an iterator for.
     pub fn get_stretches(
         &self,
-        type_: CircuitStretchType,
+        stretch_type: CircuitStretchType,
     ) -> impl ExactSizeIterator<Item = &expr::Stretch> {
-        match type_ {
+        match stretch_type {
             CircuitStretchType::Capture => &self.stretches_capture,
             CircuitStretchType::Declare => &self.stretches_declare,
         }
