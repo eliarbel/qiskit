@@ -1,15 +1,25 @@
-
-use crate::object_registry::ObjectRegistry;
-use crate::{Var, Stretch};
 use crate::classical::expr;
+use crate::object_registry::ObjectRegistry;
+use crate::{Stretch, Var};
 use indexmap::IndexMap;
 
-use pyo3::prelude::*;
-use pyo3::IntoPyObjectExt;
-use pyo3::types::PyTuple;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::PyTuple;
+use pyo3::IntoPyObjectExt;
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum VarType {
+    Input = 0,
+    Capture = 1,
+    Declare = 2,
+}
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum StretchType {
+    Capture = 0,
+    Declare = 1,
+}
 #[derive(Clone, Debug)]
 pub struct VarStretchContainer {
     // Variables registered in the container
@@ -26,7 +36,7 @@ pub struct VarStretchContainer {
     stretch_indices: [Vec<Stretch>; 2],
 }
 
-impl VarStretchContainer { // TODO: change name, it's more than just a container now
+impl VarStretchContainer {
     pub fn new() -> Self {
         VarStretchContainer {
             vars: ObjectRegistry::new(),
@@ -49,9 +59,13 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
         }
     }
 
-    pub fn to_pickle(&self, py: Python) -> (Vec<(String, PyObject)>, Vec<expr::Var>, Vec<expr::Stretch>) {
+    pub fn to_pickle(
+        &self,
+        py: Python,
+    ) -> (Vec<(String, PyObject)>, Vec<expr::Var>, Vec<expr::Stretch>) {
         (
-            self.identifier_info.iter()
+            self.identifier_info
+                .iter()
                 .map(|(k, v)| (k.clone(), v.clone().to_pickle(py).unwrap()))
                 .collect::<Vec<(String, PyObject)>>(),
             self.vars.objects().clone(),
@@ -59,9 +73,12 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
         )
     }
 
-    pub fn from_pickle(py: Python, identifiers: Vec<(String, PyObject)>, // TODO: maybe jest accept iterators?
-            vars: Vec<expr::Var>,
-            stretches: Vec<expr::Stretch>) -> PyResult<Self> {
+    pub fn from_pickle(
+        py: Python,
+        identifiers: Vec<(String, PyObject)>, // TODO: maybe jest accept iterators?
+        vars: Vec<expr::Var>,
+        stretches: Vec<expr::Stretch>,
+    ) -> PyResult<Self> {
         let mut res = VarStretchContainer::with_capacity(Some(vars.len()), Some(stretches.len()));
 
         for identifier_info in identifiers {
@@ -134,10 +151,13 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
     }
 
     /// TODO: document & test
-    pub fn add_var(&mut self, var: expr::Var, var_type: VarType) -> Result<Var, String> { // TODO: Should we return the var?
+    pub fn add_var(&mut self, var: expr::Var, var_type: VarType) -> Result<Var, String> {
         let name = {
             let expr::Var::Standalone { name, .. } = &var else {
-                return Err("cannot add variables that wrap `Clbit` or `ClassicalRegister` instances".to_string());
+                return Err(
+                    "cannot add variables that wrap `Clbit` or `ClassicalRegister` instances"
+                        .to_string(),
+                );
             };
             name.clone()
         };
@@ -154,16 +174,22 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
 
         match var_type {
             VarType::Input
-                if self.num_vars(VarType::Capture) > 0 || self.num_stretches(StretchType::Capture) > 0 =>
+                if self.num_vars(VarType::Capture) > 0
+                    || self.num_stretches(StretchType::Capture) > 0 =>
             {
-                return Err("circuits to be enclosed with captures cannot have input variables".to_string());
+                return Err(
+                    "circuits to be enclosed with captures cannot have input variables".to_string(),
+                );
             }
-            VarType::Capture if !self.var_indices[VarType::Input as usize].is_empty() => { // TODO: change to num inputs (also for)
-                return Err("circuits with input variables cannot be enclosed, so they cannot be closures".to_string());
+            VarType::Capture if !self.var_indices[VarType::Input as usize].is_empty() => {
+                // TODO: change to num inputs (also for)
+                return Err(
+                    "circuits with input variables cannot be enclosed, so they cannot be closures"
+                        .to_string(),
+                );
             }
             _ => {}
         }
-
 
         let idx = self.vars.add(var, true).map_err(|e| e.to_string())?;
         self.var_indices[var_type as usize].push(idx);
@@ -184,7 +210,8 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
         &mut self,
         stretch: expr::Stretch,
         stretch_type: StretchType,
-    ) -> Result<Stretch, String> { // TODO: should we return the Stretch?
+    ) -> Result<Stretch, String> {
+        // TODO: should we return the Stretch?
         let name = stretch.name.clone();
 
         match self.identifier_info.get(&name) {
@@ -194,18 +221,26 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
                 return Err("already present in the circuit".to_string());
             }
             Some(_) => {
-                return Err("cannot add stretch as its name shadows an existing identifier".to_string());
+                return Err(
+                    "cannot add stretch as its name shadows an existing identifier".to_string(),
+                );
             }
             _ => {}
         }
 
         if let StretchType::Capture = stretch_type {
             if !self.var_indices[VarType::Input as usize].is_empty() {
-                return Err("circuits with input variables cannot be enclosed, so they cannot be closures".to_string());
+                return Err(
+                    "circuits with input variables cannot be enclosed, so they cannot be closures"
+                        .to_string(),
+                );
             }
         }
 
-        let idx = self.stretches.add(stretch, true).map_err(|e| e.to_string())?;
+        let idx = self
+            .stretches
+            .add(stretch, true)
+            .map_err(|e| e.to_string())?;
         self.stretch_indices[stretch_type as usize].push(idx);
 
         self.identifier_info.insert(
@@ -217,12 +252,6 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
         );
 
         Ok(idx)
-    }
-
-    /// Returns an iterator over the identifiers
-    // TODO: make this inline
-    pub fn identifiers(&self) -> impl ExactSizeIterator<Item = (&String, &IdentifierInfo)> {
-        self.identifier_info.iter()
     }
 
     /// TODO: document & test
@@ -247,15 +276,25 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
 
     // TODO: make this inline
     pub fn iter_vars(&self, var_type: VarType) -> impl ExactSizeIterator<Item = &expr::Var> {
-        self.var_indices[var_type as usize].iter()
-        .map(|idx| self.vars.get(*idx).expect("Variable with this index should be registered"))
+        self.var_indices[var_type as usize].iter().map(|idx| {
+            self.vars
+                .get(*idx)
+                .expect("Variable with this index should be registered")
+        })
     }
 
     // TODO: make this inline
-    pub fn iter_stretches(&self, stretch_type: StretchType) -> impl ExactSizeIterator<Item = &expr::Stretch> {
+    pub fn iter_stretches(
+        &self,
+        stretch_type: StretchType,
+    ) -> impl ExactSizeIterator<Item = &expr::Stretch> {
         self.stretch_indices[stretch_type as usize]
-        .iter()
-        .map(|idx| self.stretches.get(*idx).expect("Stretch with this index should be registered"))
+            .iter()
+            .map(|idx| {
+                self.stretches
+                    .get(*idx)
+                    .expect("Stretch with this index should be registered")
+            })
     }
 
     // TODO: organize the order of the functions here
@@ -276,17 +315,13 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
 
     // TODO: make this inline & document
     pub fn has_var(&self, name: &str) -> bool {
-        if let Some(IdentifierInfo::Var(_)) = self.identifier_info.get(name) {
-            true
-        } else {
-            false
-        }
+        matches!(self.identifier_info.get(name), Some(IdentifierInfo::Var(_)))
     }
 
     // TODO: make this inline & document
-    pub fn has_var_type(&self, name: &str, var_type: VarType) -> bool {
+    pub fn has_var_by_type(&self, name: &str, var_type: VarType) -> bool {
         if let Some(IdentifierInfo::Var(info)) = self.identifier_info.get(name) {
-            matches!(info.type_, var_type)
+            info.type_ == var_type
         } else {
             false
         }
@@ -294,17 +329,16 @@ impl VarStretchContainer { // TODO: change name, it's more than just a container
 
     // TODO: make this inline & document
     pub fn has_stretch(&self, name: &str) -> bool {
-        if let Some(IdentifierInfo::Stretch(_)) = self.identifier_info.get(name) {
-            true
-        } else {
-            false
-        }
+        matches!(
+            self.identifier_info.get(name),
+            Some(IdentifierInfo::Stretch(_))
+        )
     }
 
     // TODO: make this inline & document
-    pub fn has_stretch_type(&self, name: &str, stretch_type: StretchType) -> bool {
+    pub fn has_stretch_by_type(&self, name: &str, stretch_type: StretchType) -> bool {
         if let Some(IdentifierInfo::Stretch(info)) = self.identifier_info.get(name) {
-            matches!(info.type_, stretch_type)
+            info.type_ == stretch_type
         } else {
             false
         }
@@ -329,10 +363,7 @@ impl PartialEq for VarStretchContainer {
             };
 
             match (lhs_id_info, rhs_id_info) {
-                (
-                    IdentifierInfo::Var(lhs_var_info),
-                    IdentifierInfo::Var(rhs_var_info),
-                ) => {
+                (IdentifierInfo::Var(lhs_var_info), IdentifierInfo::Var(rhs_var_info)) => {
                     if lhs_var_info.type_ != rhs_var_info.type_
                         || !other
                             .vars
@@ -346,12 +377,9 @@ impl PartialEq for VarStretchContainer {
                     IdentifierInfo::Stretch(rhs_stretch_info),
                 ) => {
                     if lhs_stretch_info.type_ != rhs_stretch_info.type_
-                        || !other.stretches.contains(
-                            self
-                                .stretches
-                                .get(lhs_stretch_info.stretch)
-                                .unwrap(),
-                        )
+                        || !other
+                            .stretches
+                            .contains(self.stretches.get(lhs_stretch_info.stretch).unwrap())
                     {
                         return false; // Not the same stretch type or UUID
                     };
@@ -361,8 +389,7 @@ impl PartialEq for VarStretchContainer {
                     // in `identifier_info` of the other CircuitData - which match the stretches encountered during the
                     // iteration here - are monotonically increasing.
                     if let StretchType::Declare = rhs_stretch_info.type_ {
-                        let rhs_stretch_idx =
-                            other.identifier_info.get_index_of(id_name).unwrap();
+                        let rhs_stretch_idx = other.identifier_info.get_index_of(id_name).unwrap();
                         if rhs_stretch_idx < prev_rhs_stretch_idx {
                             return false;
                         }
@@ -373,22 +400,20 @@ impl PartialEq for VarStretchContainer {
                     return false;
                 }
             }
-
         }
         true
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum VarType {
-    Input = 0,
-    Capture = 1,
-    Declare = 2,
+impl Default for VarStretchContainer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct VarInfo {
-    pub var: Var, // TODO: remove pub
+struct VarInfo {
+    pub var: Var,       // TODO: remove pub
     pub type_: VarType, // TODO: remove pub
 }
 
@@ -409,25 +434,12 @@ impl VarInfo {
             },
         })
     }
-
-    pub fn get_var(&self) -> Var {
-        self.var
-    }
-
-    pub fn get_type(&self) -> VarType {
-        self.type_
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum StretchType {
-    Capture = 0,
-    Declare = 1,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct StretchInfo { // TODO: remove pub
-    pub stretch: Stretch, // TODO: remove pub
+struct StretchInfo {
+    // TODO: remove pub
+    pub stretch: Stretch,   // TODO: remove pub
     pub type_: StretchType, // TODO: remove pub
 }
 
@@ -447,36 +459,30 @@ impl StretchInfo {
             },
         })
     }
-
-    pub fn get_stretch(&self) -> Stretch {
-        self.stretch
-    }
-
-    pub fn get_type(&self) -> StretchType {
-        self.type_
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum IdentifierInfo { // TODO: this should not be public once the consolidation is complete
+enum IdentifierInfo {
     Stretch(StretchInfo),
     Var(VarInfo),
 }
 
 impl IdentifierInfo {
-    pub fn to_pickle(&self, py: Python) -> PyResult<PyObject> { // TODO: remove pub
+    pub fn to_pickle(&self, py: Python) -> PyResult<PyObject> {
+        // TODO: remove pub
         match self {
             IdentifierInfo::Stretch(info) => (0, info.to_pickle(py)?).into_py_any(py),
             IdentifierInfo::Var(info) => (1, info.to_pickle(py)?).into_py_any(py),
         }
     }
 
-    pub fn from_pickle(ob: &Bound<PyAny>) -> PyResult<Self> { // TODO: remove pub
+    pub fn from_pickle(ob: &Bound<PyAny>) -> PyResult<Self> {
+        // TODO: remove pub
         let val_tuple = ob.downcast::<PyTuple>()?;
         match val_tuple.get_item(0)?.extract::<u8>()? {
-            0 => Ok(IdentifierInfo::Stretch(
-                StretchInfo::from_pickle(&val_tuple.get_item(1)?)?,
-            )),
+            0 => Ok(IdentifierInfo::Stretch(StretchInfo::from_pickle(
+                &val_tuple.get_item(1)?,
+            )?)),
             1 => Ok(IdentifierInfo::Var(VarInfo::from_pickle(
                 &val_tuple.get_item(1)?,
             )?)),
@@ -484,4 +490,3 @@ impl IdentifierInfo {
         }
     }
 }
-

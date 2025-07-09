@@ -10,7 +10,6 @@
 // copyright notice, and modified files need to carry a notice indicating
 // that they have been altered from the originals.
 
-use std::env::vars;
 use std::fmt::Debug;
 use std::hash::Hash;
 #[cfg(feature = "cache_pygates")]
@@ -32,8 +31,8 @@ use crate::packed_instruction::{PackedInstruction, PackedOperation};
 use crate::parameter_table::{ParameterTable, ParameterTableError, ParameterUse, ParameterUuid};
 use crate::register_data::RegisterData;
 use crate::slice::{PySequenceIndex, SequenceIndex};
-use crate::{Clbit, Qubit, Stretch, Var, VarsMode};
-use crate::var_stretch_container::{IdentifierInfo, StretchType, VarStretchContainer, VarType};
+use crate::var_stretch_container::{StretchType, VarStretchContainer, VarType};
+use crate::{Clbit, Qubit, VarsMode};
 
 use numpy::PyReadonlyArray1;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
@@ -217,7 +216,6 @@ impl CircuitData {
                 vars_stretches_state.0, // identifiers vector
                 vars_stretches_state.1, // variables objects
                 vars_stretches_state.2, // stretch objects
-
             )
         };
         (ty, args, state, self_.try_iter()?).into_py_any(py)
@@ -240,7 +238,8 @@ impl CircuitData {
 
         // borrowed_mut.identifier_info =
         //     IndexMap::with_capacity_and_hasher(state.4.len(), RandomState::default());
-        borrowed_mut.vars_stretches = VarStretchContainer::from_pickle(slf.py(), state.4, state.5, state.6)?;
+        borrowed_mut.vars_stretches =
+            VarStretchContainer::from_pickle(slf.py(), state.4, state.5, state.6)?;
 
         Ok(())
     }
@@ -603,9 +602,16 @@ impl CircuitData {
         res.clbit_indices = self.clbit_indices.clone();
 
         match vars_mode {
-            VarsMode::Alike => {res.vars_stretches = self.vars_stretches.clone();},
-            VarsMode::Captures => {res.vars_stretches = self.vars_stretches.clone_as_captures().map_err(|e| CircuitError::new_err(e))?;},
-            VarsMode::Drop => {},
+            VarsMode::Alike => {
+                res.vars_stretches = self.vars_stretches.clone();
+            }
+            VarsMode::Captures => {
+                res.vars_stretches = self
+                    .vars_stretches
+                    .clone_as_captures()
+                    .map_err(CircuitError::new_err)?;
+            }
+            VarsMode::Drop => {}
         };
 
         Ok(res)
@@ -1102,7 +1108,6 @@ impl CircuitData {
             if self_cd.vars_stretches != other_cd.borrow().vars_stretches {
                 return Ok(false);
             }
-
         }
 
         // Implemented using generic iterators on both sides
@@ -1271,8 +1276,9 @@ impl CircuitData {
     ///     var: the variable to add.
     #[pyo3(name = "add_input_var")]
     fn py_add_input_var(&mut self, var: expr::Var) -> PyResult<()> {
-        self.vars_stretches.add_var(var, VarType::Input)
-        .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+        self.vars_stretches
+            .add_var(var, VarType::Input)
+            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
     }
 
     /// Add a captured variable to the circuit.
@@ -1281,8 +1287,9 @@ impl CircuitData {
     ///     var: the variable to add.
     #[pyo3(name = "add_captured_var")]
     fn py_add_captured_var(&mut self, var: expr::Var) -> PyResult<()> {
-        self.vars_stretches.add_var(var, VarType::Capture)
-        .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+        self.vars_stretches
+            .add_var(var, VarType::Capture)
+            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
     }
 
     /// Add a local variable to the circuit.
@@ -1291,8 +1298,9 @@ impl CircuitData {
     ///     var: the variable to add.
     #[pyo3(name = "add_declared_var")]
     fn py_add_declared_var(&mut self, var: expr::Var) -> PyResult<()> {
-        self.vars_stretches.add_var(var, VarType::Declare)
-        .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+        self.vars_stretches
+            .add_var(var, VarType::Declare)
+            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
     }
 
     /// Check if this realtime variable is in the circuit.
@@ -1312,19 +1320,19 @@ impl CircuitData {
     /// Check if the circuit contains an input variable with the given name.
     #[pyo3(name = "has_input_var")]
     fn py_has_input_var(&self, name: &str) -> PyResult<bool> {
-        Ok(self.vars_stretches.has_var_type(name, VarType::Input))
+        Ok(self.vars_stretches.has_var_by_type(name, VarType::Input))
     }
 
     /// Check if the circuit contains a local variable with the given name.
     #[pyo3(name = "has_declared_var")]
     fn py_has_declared_var(&self, name: &str) -> PyResult<bool> {
-        Ok(self.vars_stretches.has_var_type(name, VarType::Declare))
+        Ok(self.vars_stretches.has_var_by_type(name, VarType::Declare))
     }
 
     /// Check if the circuit contains a capture variable with the given name.
     #[pyo3(name = "has_captured_var")]
     fn py_has_captured_var(&self, name: &str) -> PyResult<bool> {
-        Ok(self.vars_stretches.has_var_type(name, VarType::Capture))
+        Ok(self.vars_stretches.has_var_by_type(name, VarType::Capture))
     }
 
     /// Return a list of the captured variables tracked in this circuit.
@@ -1332,7 +1340,8 @@ impl CircuitData {
     fn py_get_captured_vars(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
             py,
-            self.vars_stretches.iter_vars(VarType::Capture)
+            self.vars_stretches
+                .iter_vars(VarType::Capture)
                 .map(|var| var.clone().into_pyobject(py).unwrap()),
         )?
         .unbind())
@@ -1343,7 +1352,8 @@ impl CircuitData {
     fn py_get_declared_vars(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
             py,
-            self.vars_stretches.iter_vars(VarType::Declare)
+            self.vars_stretches
+                .iter_vars(VarType::Declare)
                 .map(|var| var.clone().into_pyobject(py).unwrap()),
         )?
         .unbind())
@@ -1352,7 +1362,7 @@ impl CircuitData {
     ///B                                                                                                                                                                                                                                                                  Return the variable in the circuit corresponding to the given name, or None if no such variable.
     #[pyo3(name = "get_var")]
     fn py_get_var(&self, py: Python, name: &str) -> PyResult<PyObject> {
-        if let Some(&ref var) = self.vars_stretches.get_var(name) {
+        if let Some(var) = self.vars_stretches.get_var(name) {
             var.clone().into_py_any(py)
         } else {
             Ok(py.None())
@@ -1364,7 +1374,8 @@ impl CircuitData {
     fn py_get_input_vars(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
             py,
-            self.vars_stretches.iter_vars(VarType::Input)
+            self.vars_stretches
+                .iter_vars(VarType::Input)
                 .map(|var| var.clone().into_pyobject(py).unwrap()),
         )?
         .unbind())
@@ -1394,8 +1405,9 @@ impl CircuitData {
     ///     stretch: the stretch variable to add.
     #[pyo3(name = "add_captured_stretch")]
     fn py_add_captured_stretch(&mut self, stretch: expr::Stretch) -> PyResult<()> {
-        self.vars_stretches.add_stretch(stretch, StretchType::Capture)
-        .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+        self.vars_stretches
+            .add_stretch(stretch, StretchType::Capture)
+            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
     }
 
     /// Add a local stretch to the circuit.
@@ -1404,8 +1416,9 @@ impl CircuitData {
     ///     stretch: the stretch variable to add.
     #[pyo3(name = "add_declared_stretch")]
     fn py_add_declared_stretch(&mut self, stretch: expr::Stretch) -> PyResult<()> {
-        self.vars_stretches.add_stretch(stretch, StretchType::Declare)
-        .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+        self.vars_stretches
+            .add_stretch(stretch, StretchType::Declare)
+            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
     }
 
     /// Check if this stretch variable is in the circuit.
@@ -1425,19 +1438,23 @@ impl CircuitData {
     /// Check if the circuit contains a capture stretch with the given name.
     #[pyo3(name = "has_captured_stretch")]
     fn py_has_captured_stretch(&self, name: &str) -> PyResult<bool> {
-        Ok(self.vars_stretches.has_stretch_type(name, StretchType::Capture))
+        Ok(self
+            .vars_stretches
+            .has_stretch_by_type(name, StretchType::Capture))
     }
 
     /// Check if the circuit contains a local stretch with the given name.
     #[pyo3(name = "has_declared_stretch")]
     fn py_has_declared_stretch(&self, name: &str) -> PyResult<bool> {
-        Ok(self.vars_stretches.has_stretch_type(name, StretchType::Declare))
+        Ok(self
+            .vars_stretches
+            .has_stretch_by_type(name, StretchType::Declare))
     }
 
     // Return the stretch variable in the circuit corresponding to the given name, or None if no such variable.
     #[pyo3(name = "get_stretch")]
     pub fn py_get_stretch(&self, py: Python, name: &str) -> PyResult<PyObject> {
-        if let Some(&ref stretch) = self.vars_stretches.get_stretch(name) {
+        if let Some(stretch) = self.vars_stretches.get_stretch(name) {
             stretch.clone().into_py_any(py)
         } else {
             Ok(py.None())
@@ -1449,7 +1466,8 @@ impl CircuitData {
     fn py_get_captured_stretches(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
             py,
-            self.vars_stretches.iter_stretches(StretchType::Capture)
+            self.vars_stretches
+                .iter_stretches(StretchType::Capture)
                 .map(|stretch| stretch.clone().into_pyobject(py).unwrap()),
         )?
         .unbind())
@@ -1460,7 +1478,8 @@ impl CircuitData {
     fn py_get_declared_stretches(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
             py,
-            self.vars_stretches.iter_stretches(StretchType::Declare)
+            self.vars_stretches
+                .iter_stretches(StretchType::Declare)
                 .map(|stretch| stretch.clone().into_pyobject(py).unwrap()),
         )?
         .unbind())
