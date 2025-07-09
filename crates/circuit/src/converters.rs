@@ -50,23 +50,12 @@ pub fn circuit_to_dag(
     qubit_order: Option<Vec<Bound<PyAny>>>,
     clbit_order: Option<Vec<Bound<PyAny>>>,
 ) -> PyResult<DAGCircuit> {
-    DAGCircuit::from_circuit(
-        py,
-        quantum_circuit,
-        copy_operations,
-        qubit_order,
-        clbit_order,
-    )
+    DAGCircuit::from_circuit(quantum_circuit, copy_operations, qubit_order, clbit_order)
 }
 
 #[pyfunction(signature = (dag, copy_operations = true))]
-pub fn dag_to_circuit(
-    py: Python,
-    dag: &DAGCircuit,
-    copy_operations: bool,
-) -> PyResult<CircuitData> {
+pub fn dag_to_circuit(dag: &DAGCircuit, copy_operations: bool) -> PyResult<CircuitData> {
     CircuitData::from_packed_instructions(
-        py,
         dag.qubits().clone(),
         dag.clbits().clone(),
         dag.qargs_interner().clone(),

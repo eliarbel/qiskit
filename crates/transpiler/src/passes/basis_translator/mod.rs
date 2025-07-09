@@ -33,7 +33,7 @@ use qiskit_circuit::dag_circuit::DAGCircuitBuilder;
 use qiskit_circuit::imports::DAG_TO_CIRCUIT;
 use qiskit_circuit::imports::PARAMETER_EXPRESSION;
 use qiskit_circuit::operations::Param;
-use qiskit_circuit::packed_instruction::PackedInstruction;
+use qiskit_circuit::packed_instruction::{PackedInstruction, PackedOperation};
 use qiskit_circuit::{
     circuit_data::CircuitData,
     dag_circuit::DAGCircuit,
