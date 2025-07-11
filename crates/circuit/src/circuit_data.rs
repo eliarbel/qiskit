@@ -1270,7 +1270,7 @@ impl CircuitData {
         Ok(())
     }
 
-    /// Add an input variable to the circuit.
+    /// Adds an input variable to the circuit.
     ///
     /// Args:
     ///     var: the variable to add.
@@ -1278,10 +1278,11 @@ impl CircuitData {
     fn py_add_input_var(&mut self, var: expr::Var) -> PyResult<()> {
         self.vars_stretches
             .add_var(var, VarType::Input)
-            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+            .map_err(CircuitError::new_err)?;
+        Ok(())
     }
 
-    /// Add a captured variable to the circuit.
+    /// Adds a captured variable to the circuit.
     ///
     /// Args:
     ///     var: the variable to add.
@@ -1289,10 +1290,11 @@ impl CircuitData {
     fn py_add_captured_var(&mut self, var: expr::Var) -> PyResult<()> {
         self.vars_stretches
             .add_var(var, VarType::Capture)
-            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+            .map_err(CircuitError::new_err)?;
+        Ok(())
     }
 
-    /// Add a local variable to the circuit.
+    /// Adds a declared variable to the circuit.
     ///
     /// Args:
     ///     var: the variable to add.
@@ -1300,10 +1302,11 @@ impl CircuitData {
     fn py_add_declared_var(&mut self, var: expr::Var) -> PyResult<()> {
         self.vars_stretches
             .add_var(var, VarType::Declare)
-            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+            .map_err(CircuitError::new_err)?;
+        Ok(())
     }
 
-    /// Check if this realtime variable is in the circuit.
+    /// Checks if this variable is in the circuit.
     ///
     /// Args:
     ///     var: the variable or name to check.
@@ -1317,25 +1320,25 @@ impl CircuitData {
         }
     }
 
-    /// Check if the circuit contains an input variable with the given name.
+    /// Checks if the circuit contains an input variable with the specified name.
     #[pyo3(name = "has_input_var")]
     fn py_has_input_var(&self, name: &str) -> PyResult<bool> {
         Ok(self.vars_stretches.has_var_by_type(name, VarType::Input))
     }
 
-    /// Check if the circuit contains a local variable with the given name.
+    /// Checks if the circuit contains a local variable with the specified name.
     #[pyo3(name = "has_declared_var")]
     fn py_has_declared_var(&self, name: &str) -> PyResult<bool> {
         Ok(self.vars_stretches.has_var_by_type(name, VarType::Declare))
     }
 
-    /// Check if the circuit contains a capture variable with the given name.
+    /// Checks if the circuit contains a capture variable with the specified name.
     #[pyo3(name = "has_captured_var")]
     fn py_has_captured_var(&self, name: &str) -> PyResult<bool> {
         Ok(self.vars_stretches.has_var_by_type(name, VarType::Capture))
     }
 
-    /// Return a list of the captured variables tracked in this circuit.
+    /// Returns a list of the captured variables tracked in this circuit.
     #[pyo3(name = "get_captured_vars")]
     fn py_get_captured_vars(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
@@ -1347,7 +1350,7 @@ impl CircuitData {
         .unbind())
     }
 
-    /// Return a list of the local variables tracked in this circuit.
+    /// Returns a list of the local variables tracked in this circuit.
     #[pyo3(name = "get_declared_vars")]
     fn py_get_declared_vars(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
@@ -1359,7 +1362,7 @@ impl CircuitData {
         .unbind())
     }
 
-    ///B                                                                                                                                                                                                                                                                  Return the variable in the circuit corresponding to the given name, or None if no such variable.
+    /// Returns the variable in the circuit corresponding to the specified name, or None if no such variable.                                                                                                                                                                                                                                                                  Return the variable in the circuit corresponding to the given name, or None if no such variable.
     #[pyo3(name = "get_var")]
     fn py_get_var(&self, py: Python, name: &str) -> PyResult<PyObject> {
         if let Some(var) = self.vars_stretches.get_var(name) {
@@ -1369,7 +1372,7 @@ impl CircuitData {
         }
     }
 
-    /// Return a list of the input variables tracked in this circuit
+    /// Returns a list of the input variables tracked in this circuit
     #[pyo3(name = "get_input_vars")]
     fn py_get_input_vars(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
@@ -1381,25 +1384,25 @@ impl CircuitData {
         .unbind())
     }
 
-    /// Return the number of classical input variables in the circuit.
+    /// Returns the number of classical input variables in the circuit.
     #[getter]
     pub fn num_input_vars(&self) -> usize {
         self.vars_stretches.num_vars(VarType::Input)
     }
 
-    /// Return the number of captured variables in the circuit.
+    /// Returns the number of captured variables in the circuit.
     #[getter]
     pub fn num_captured_vars(&self) -> usize {
         self.vars_stretches.num_vars(VarType::Capture)
     }
 
-    /// Return the number of local variables in the circuit.
+    /// Returns the number of local variables in the circuit.
     #[getter]
     pub fn num_declared_vars(&self) -> usize {
         self.vars_stretches.num_vars(VarType::Declare)
     }
 
-    /// Add a captured stretch to the circuit.
+    /// Adds a captured stretch to the circuit.
     ///
     /// Args:
     ///     stretch: the stretch variable to add.
@@ -1407,10 +1410,11 @@ impl CircuitData {
     fn py_add_captured_stretch(&mut self, stretch: expr::Stretch) -> PyResult<()> {
         self.vars_stretches
             .add_stretch(stretch, StretchType::Capture)
-            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+            .map_err(CircuitError::new_err)?;
+        Ok(())
     }
 
-    /// Add a local stretch to the circuit.
+    /// Adds a local stretch to the circuit.
     ///
     /// Args:
     ///     stretch: the stretch variable to add.
@@ -1418,13 +1422,14 @@ impl CircuitData {
     fn py_add_declared_stretch(&mut self, stretch: expr::Stretch) -> PyResult<()> {
         self.vars_stretches
             .add_stretch(stretch, StretchType::Declare)
-            .map_or_else(|e| Err(CircuitError::new_err(e)), |_| Ok(()))
+            .map_err(CircuitError::new_err)?;
+        Ok(())
     }
 
-    /// Check if this stretch variable is in the circuit.
+    /// Checkss if this stretch variable is in the circuit.
     ///
     /// Args:
-    ///     var: the variable or name to check.
+    ///     stretch: the stretch or name to check.
     #[pyo3(name = "has_stretch")]
     fn py_has_stretch(&self, stretch: &Bound<PyAny>) -> PyResult<bool> {
         if let Ok(name) = stretch.extract::<String>() {
@@ -1435,7 +1440,7 @@ impl CircuitData {
         }
     }
 
-    /// Check if the circuit contains a capture stretch with the given name.
+    /// Check if the circuit contains a captured stretch with the specified name.
     #[pyo3(name = "has_captured_stretch")]
     fn py_has_captured_stretch(&self, name: &str) -> PyResult<bool> {
         Ok(self
@@ -1443,7 +1448,7 @@ impl CircuitData {
             .has_stretch_by_type(name, StretchType::Capture))
     }
 
-    /// Check if the circuit contains a local stretch with the given name.
+    /// Checks if the circuit contains a local stretch with the specified name.
     #[pyo3(name = "has_declared_stretch")]
     fn py_has_declared_stretch(&self, name: &str) -> PyResult<bool> {
         Ok(self
@@ -1451,9 +1456,9 @@ impl CircuitData {
             .has_stretch_by_type(name, StretchType::Declare))
     }
 
-    // Return the stretch variable in the circuit corresponding to the given name, or None if no such variable.
+    // Returns the stretch  in the circuit corresponding to the specified name, or None if no such variable.
     #[pyo3(name = "get_stretch")]
-    pub fn py_get_stretch(&self, py: Python, name: &str) -> PyResult<PyObject> {
+    fn py_get_stretch(&self, py: Python, name: &str) -> PyResult<PyObject> {
         if let Some(stretch) = self.vars_stretches.get_stretch(name) {
             stretch.clone().into_py_any(py)
         } else {
@@ -1461,7 +1466,7 @@ impl CircuitData {
         }
     }
 
-    /// Return a list of the captured stretch variables tracked in this circuit.
+    /// Returns a list of the captured stretch variables tracked in this circuit.
     #[pyo3(name = "get_captured_stretches")]
     fn py_get_captured_stretches(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
@@ -1473,7 +1478,7 @@ impl CircuitData {
         .unbind())
     }
 
-    /// Return a list of the local stretch variables tracked in this circuit.
+    /// Returns a list of the local stretch variables tracked in this circuit.
     #[pyo3(name = "get_declared_stretches")]
     fn py_get_declared_stretches(&self, py: Python) -> PyResult<Py<PyList>> {
         Ok(PyList::new(
@@ -1485,13 +1490,13 @@ impl CircuitData {
         .unbind())
     }
 
-    /// Return the number of local stretch variables in the circuit.
+    /// Returns the number of local stretch variables in the circuit.
     #[getter]
     pub fn num_declared_stretches(&self) -> usize {
         self.vars_stretches.num_stretches(StretchType::Declare)
     }
 
-    /// Return the number of captured stretch variables in the circuit.
+    /// Returns the number of captured stretch variables in the circuit.
     #[getter]
     pub fn num_captured_stretches(&self) -> usize {
         self.vars_stretches.num_stretches(StretchType::Capture)
@@ -1593,7 +1598,7 @@ impl CircuitData {
     ///   of the operation while iterating for constructing the new `CircuitData`. An
     ///   example of this use case is in `qiskit_circuit::converters::dag_to_circuit`.
     /// * global_phase: The global phase value to use for the new circuit.
-    /// * vars_stretches: variables and stretches to add in order to the new circuit.
+    /// * vars_stretches: variables and stretches to add to the new circuit.
     #[allow(clippy::too_many_arguments)]
     pub fn from_packed_instructions<I>(
         qubits: ObjectRegistry<Qubit, ShareableQubit>,
@@ -1624,7 +1629,9 @@ impl CircuitData {
             cregs,
             qubit_indices,
             clbit_indices,
-            vars_stretches: VarStretchContainer::with_capacity(None, None), // TODO: change to actual sizes
+            vars_stretches: vars_stretches
+                .cloned()
+                .unwrap_or_else(VarStretchContainer::new),
         };
 
         // use the global phase setter to ensure parameters are registered
@@ -1634,11 +1641,6 @@ impl CircuitData {
         for inst in instruction_iter {
             res.data.push(inst?);
             res.track_instruction_parameters(res.data.len() - 1)?;
-        }
-
-        // Add variables and stretch
-        if let Some(vars_stretches) = vars_stretches {
-            res.vars_stretches = vars_stretches.clone();
         }
 
         Ok(res)
@@ -2210,7 +2212,7 @@ impl CircuitData {
     }
 
     /// Returns an immutable view of the vars and stretches in the circuit
-    pub fn get_vars_stretches(&self) -> &VarStretchContainer {
+    pub fn get_var_stretch_container(&self) -> &VarStretchContainer {
         &self.vars_stretches
     }
 

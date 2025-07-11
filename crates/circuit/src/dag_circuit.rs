@@ -183,7 +183,7 @@ pub struct DAGCircuit {
     qubits: ObjectRegistry<Qubit, ShareableQubit>,
     /// Clbits registered in the circuit.
     clbits: ObjectRegistry<Clbit, ShareableClbit>,
-    // Variables and stretches registered in the DAG circuit
+    // Variables and stretches registered in the DAGCircuit
     vars_stretches: VarStretchContainer,
     /// Global phase.
     global_phase: Param,
@@ -3903,7 +3903,7 @@ impl DAGCircuit {
     ///
     /// Args:
     ///     var: the identifier or name to check.
-    #[pyo3(name = "has_identifer")]
+    #[pyo3(name = "has_identifier")]
     fn py_has_identifier(&self, var: &Bound<PyAny>) -> PyResult<bool> {
         if let Ok(name) = var.extract::<String>() {
             Ok(self.vars_stretches.has_identifier(&name))
@@ -3923,7 +3923,6 @@ impl DAGCircuit {
 
     /// Iterable over the input classical variables tracked by the circuit.
     fn iter_input_vars(&self, py: Python) -> PyResult<Py<PyIterator>> {
-        // TODO: do we have something similar in CircuitData?
         let result = PySet::new(
             py,
             self.input_vars()
@@ -5977,7 +5976,6 @@ impl DAGCircuit {
     ///
     /// The provided [Var] must be from this [DAGCircuit].
     pub fn get_var(&self, var: Var) -> Option<&expr::Var> {
-        // TODO: use this instead of all the vars_stretches.vars(). Should it be private?
         self.vars_stretches.vars().get(var)
     }
 
@@ -5985,16 +5983,15 @@ impl DAGCircuit {
     ///
     /// The provided [Stretch] must be from this [DAGCircuit].
     pub fn get_stretch(&self, stretch: Stretch) -> Option<&expr::Stretch> {
-        // TODO: use this instead of all the vars_stretches.stretches(). Should it be private?
         self.vars_stretches.stretches().get(stretch)
     }
 
-    // TODO: document
-    pub fn get_vars_stretches(&self) -> &VarStretchContainer {
+    /// Returns an immutable view of the vars and stretches in the DAGCircuit
+    pub fn get_var_stretch_container(&self) -> &VarStretchContainer {
         &self.vars_stretches
     }
 
-    /// Add a variable to the DAGCircuit.
+    /// Adds a variable to the DAGCircuit.
     ///
     /// # Arguments:
     ///
@@ -6464,7 +6461,7 @@ impl DAGCircuit {
             new_dag.merge_cargs(qc_data.cargs_interner(), |bit| Some(*bit))
         };
 
-        new_dag.vars_stretches = qc_data.get_vars_stretches().clone();
+        new_dag.vars_stretches = qc_data.get_var_stretch_container().clone();
         new_dag.add_var_wires(new_dag.vars_stretches.vars().len())?;
 
         // Add all the registers

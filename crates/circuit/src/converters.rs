@@ -99,7 +99,7 @@ pub fn dag_to_circuit(dag: &DAGCircuit, copy_operations: bool) -> PyResult<Circu
             }
         }),
         dag.get_global_phase(),
-        Some(dag.get_vars_stretches()),
+        Some(dag.get_var_stretch_container()),
     )
 }
 
