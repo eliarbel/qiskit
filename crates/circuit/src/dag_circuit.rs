@@ -2050,7 +2050,10 @@ impl DAGCircuit {
         if self.clbits != other.clbits {
             return Ok(false);
         }
-        if !self.vars_stretches.eq(&other.vars_stretches) {
+        if !self
+            .vars_stretches
+            .structurally_equal(&other.vars_stretches)
+        {
             return Ok(false);
         }
         if self.qregs != other.qregs {

@@ -313,7 +313,22 @@ impl VarStretchContainer {
         }
     }
 
-    /// Creates cloned copies of identifier info, variable objects and stretch objects.
+    /// Checks whether this container is structurally equal to the other container.
+    ///
+    /// Two `VarStretchContainer`s are considered structurally equal if and only if
+    /// their `vars`, `stretches` and `identifier_info` fields are identical.
+    pub fn structurally_equal(&self, other: &VarStretchContainer) -> bool {
+        if self.vars != other.vars || self.stretches != other.stretches {
+            return false;
+        }
+
+        self.identifier_info
+            .iter()
+            .zip(other.identifier_info.iter())
+            .all(|(i1, i2)| i1 == i2)
+    }
+
+    /// Returns cloned copies of identifier info, variable objects and stretch objects.
     pub fn to_pickle(
         &self,
         py: Python,
@@ -363,6 +378,8 @@ impl VarStretchContainer {
     }
 }
 
+/// Two `VarStretchContainer` containers are considered equal if and only if they contain the same
+/// variables and stretches, and the declaration order of declared stretches matches in both containers.
 impl PartialEq for VarStretchContainer {
     fn eq(&self, other: &Self) -> bool {
         if self.num_vars(VarType::Input) != other.num_vars(VarType::Input)
