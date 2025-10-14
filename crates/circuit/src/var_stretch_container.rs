@@ -1,12 +1,24 @@
+// This code is part of Qiskit.
+//
+// (C) Copyright IBM 2025
+//
+// This code is licensed under the Apache License, Version 2.0. You may
+// obtain a copy of this license in the LICENSE.txt file in the root directory
+// of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
+//
+// Any modifications or derivative works of this code must retain this
+// copyright notice, and modified files need to carry a notice indicating
+// that they have been altered from the originals.
+
 use crate::classical::expr;
 use crate::object_registry::ObjectRegistry;
 use crate::{Stretch, Var};
 use indexmap::IndexMap;
 
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
-use pyo3::IntoPyObjectExt;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum VarType {
@@ -20,6 +32,8 @@ pub enum StretchType {
     Capture = 0,
     Declare = 1,
 }
+
+type VarStretchState = (Vec<(String, Py<PyAny>)>, Vec<expr::Var>, Vec<expr::Stretch>);
 
 /// A container for variables and stretches to be used primarily by [crate::circuit_data::CircuitData] and
 /// [crate::dag_circuit::DAGCircuit]. Variables(stretches) are stored in the `vars`(`stretches`) field as
@@ -329,30 +343,22 @@ impl VarStretchContainer {
     }
 
     /// Returns cloned copies of identifier info, variable objects and stretch objects.
-    pub fn to_pickle(
-        &self,
-        py: Python,
-    ) -> (Vec<(String, PyObject)>, Vec<expr::Var>, Vec<expr::Stretch>) {
+    pub fn to_pickle(&self, py: Python) -> VarStretchState {
         (
             self.identifier_info
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone().to_pickle(py).unwrap()))
-                .collect::<Vec<(String, PyObject)>>(),
+                .collect::<Vec<(String, Py<PyAny>)>>(),
             self.vars.objects().clone(),
             self.stretches.objects().clone(),
         )
     }
 
     /// Constructs Self given identifier info, variables and stretch objects previously serialized with [Self::to_pickle()]
-    pub fn from_pickle(
-        py: Python,
-        identifiers: Vec<(String, PyObject)>,
-        vars: Vec<expr::Var>,
-        stretches: Vec<expr::Stretch>,
-    ) -> PyResult<Self> {
-        let mut res = VarStretchContainer::with_capacity(Some(vars.len()), Some(stretches.len()));
+    pub fn from_pickle(py: Python, state: VarStretchState) -> PyResult<Self> {
+        let mut res = VarStretchContainer::with_capacity(Some(state.1.len()), Some(state.2.len()));
 
-        for identifier_info in identifiers {
+        for identifier_info in state.0 {
             let id_info = IdentifierInfo::from_pickle(identifier_info.1.bind(py))?;
             match &id_info {
                 IdentifierInfo::Stretch(stretch_info) => {
@@ -366,11 +372,11 @@ impl VarStretchContainer {
             res.identifier_info.insert(identifier_info.0, id_info);
         }
 
-        for var in vars {
+        for var in state.1 {
             res.vars.add(var, false)?;
         }
 
-        for stretch in stretches {
+        for stretch in state.2 {
             res.stretches.add(stretch, false)?;
         }
 
@@ -453,7 +459,7 @@ struct VarInfo {
 }
 
 impl VarInfo {
-    fn to_pickle(&self, py: Python) -> PyResult<PyObject> {
+    fn to_pickle(&self, py: Python) -> PyResult<Py<PyAny>> {
         (self.var.0, self.type_ as u8).into_py_any(py)
     }
 
@@ -478,7 +484,7 @@ struct StretchInfo {
 }
 
 impl StretchInfo {
-    fn to_pickle(&self, py: Python) -> PyResult<PyObject> {
+    fn to_pickle(&self, py: Python) -> PyResult<Py<PyAny>> {
         (self.stretch.0, self.type_ as u8).into_py_any(py)
     }
 
@@ -502,7 +508,7 @@ enum IdentifierInfo {
 }
 
 impl IdentifierInfo {
-    fn to_pickle(&self, py: Python) -> PyResult<PyObject> {
+    fn to_pickle(&self, py: Python) -> PyResult<Py<PyAny>> {
         match self {
             IdentifierInfo::Stretch(info) => (0, info.to_pickle(py)?).into_py_any(py),
             IdentifierInfo::Var(info) => (1, info.to_pickle(py)?).into_py_any(py),
@@ -607,34 +613,40 @@ mod test {
         let mut container = VarStretchContainer::new();
 
         // Cannot add Clbit
-        assert!(container
-            .add_var(
-                expr::Var::Bit {
-                    bit: ShareableClbit::new_anonymous(),
-                },
-                VarType::Capture,
-            )
-            .is_err());
+        assert!(
+            container
+                .add_var(
+                    expr::Var::Bit {
+                        bit: ShareableClbit::new_anonymous(),
+                    },
+                    VarType::Capture,
+                )
+                .is_err()
+        );
 
         // Cannot add ClassicalRegister
-        assert!(container
-            .add_var(
-                expr::Var::Register {
-                    register: ClassicalRegister::new_owning("r1", 1),
-                    ty: Type::Bool
-                },
-                VarType::Declare
-            )
-            .is_err());
+        assert!(
+            container
+                .add_var(
+                    expr::Var::Register {
+                        register: ClassicalRegister::new_owning("r1", 1),
+                        ty: Type::Bool
+                    },
+                    VarType::Declare
+                )
+                .is_err()
+        );
 
         container.add_var(new_var("in1"), VarType::Input)?;
 
         // Cannot add an already existing var
         assert!(container.add_var(new_var("in1"), VarType::Input).is_err());
         // Cannot shadow an existing identifier
-        assert!(container
-            .add_stretch(new_stretch("in1"), StretchType::Declare)
-            .is_err());
+        assert!(
+            container
+                .add_stretch(new_stretch("in1"), StretchType::Declare)
+                .is_err()
+        );
 
         // Cannot add captured vars if input vars already exist
         assert!(container.add_var(new_var("c1"), VarType::Capture).is_err());
@@ -655,19 +667,25 @@ mod test {
         container.add_stretch(new_stretch("s1"), StretchType::Declare)?;
 
         // Cannot add a stretch which already exists
-        assert!(container
-            .add_stretch(new_stretch("s1"), StretchType::Declare)
-            .is_err());
+        assert!(
+            container
+                .add_stretch(new_stretch("s1"), StretchType::Declare)
+                .is_err()
+        );
 
         // Cannot add an identifier which shadows another identifer
-        assert!(container
-            .add_stretch(new_stretch("in1"), StretchType::Declare)
-            .is_err());
+        assert!(
+            container
+                .add_stretch(new_stretch("in1"), StretchType::Declare)
+                .is_err()
+        );
 
         // Cannot a captured stretch if inputs already exist
-        assert!(container
-            .add_stretch(new_stretch("s2"), StretchType::Capture)
-            .is_err());
+        assert!(
+            container
+                .add_stretch(new_stretch("s2"), StretchType::Capture)
+                .is_err()
+        );
 
         Ok(())
     }
