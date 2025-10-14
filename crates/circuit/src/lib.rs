@@ -41,10 +41,10 @@ pub mod vf2;
 mod var_stretch_container;
 mod variable_mapper;
 
+use pyo3::PyTypeInfo;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PySequence, PyString, PyTuple};
-use pyo3::PyTypeInfo;
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, FromPyObject)]
 pub struct Qubit(pub u32);
@@ -64,22 +64,24 @@ pub use nlayout::VirtualQubit;
 macro_rules! impl_circuit_identifier {
     ($type:ident) => {
         impl $type {
+            // The maximum storable index.
+            pub const MAX: Self = Self(u32::MAX);
+
             /// Construct a new identifier from a usize, if you have a u32 you can
             /// construct one directly via [$type()]. This will panic if the `usize`
             /// index exceeds `u32::MAX`.
             #[inline(always)]
-            pub fn new(index: usize) -> Self {
-                $type(index.try_into().unwrap_or_else(|_| {
-                    panic!(
-                        "Index value '{}' exceeds the maximum identifier width!",
-                        index
-                    )
-                }))
+            pub const fn new(index: usize) -> Self {
+                if index <= Self::MAX.index() {
+                    Self(index as u32)
+                } else {
+                    panic!("Index value exceeds the maximum identifier width!")
+                }
             }
 
             /// Convert to a usize.
             #[inline(always)]
-            pub fn index(&self) -> usize {
+            pub const fn index(&self) -> usize {
                 self.0 as usize
             }
         }
@@ -115,7 +117,7 @@ impl<'py> FromPyObject<'py> for TupleLikeArg<'py> {
                 ob.py(),
                 ob.try_iter()?
                     .map(|o| Ok(o?.unbind()))
-                    .collect::<PyResult<Vec<PyObject>>>()?,
+                    .collect::<PyResult<Vec<Py<PyAny>>>>()?,
             )?,
         };
         Ok(TupleLikeArg { value })

@@ -24,7 +24,7 @@ use crate::circuit_instruction::{CircuitInstruction, OperationFromPython};
 use crate::classical::expr;
 use crate::dag_circuit::add_global_phase;
 use crate::imports::{ANNOTATED_OPERATION, QUANTUM_CIRCUIT};
-use crate::interner::{Interned, Interner};
+use crate::interner::{Interned, InternedMap, Interner};
 use crate::object_registry::ObjectRegistry;
 use crate::operations::{Operation, OperationRef, Param, PythonOperation, StandardGate};
 use crate::packed_instruction::{PackedInstruction, PackedOperation};
@@ -38,11 +38,11 @@ use crate::{Clbit, Qubit, VarsMode};
 
 use num_complex::Complex64;
 use numpy::PyReadonlyArray1;
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyDict, PyList, PySet, PyTuple, PyType};
-use pyo3::IntoPyObjectExt;
-use pyo3::{import_exception, intern, PyTraverseError, PyVisit};
+use pyo3::{PyTraverseError, PyVisit, import_exception, intern};
 
 use hashbrown::{HashMap, HashSet};
 use indexmap::IndexMap;
@@ -56,7 +56,7 @@ type CircuitDataState<'py> = (
     Vec<ClassicalRegister>,
     Bound<'py, PyDict>,
     Bound<'py, PyDict>,
-    Vec<(String, PyObject)>,
+    Vec<(String, Py<PyAny>)>,
     Vec<expr::Var>,
     Vec<expr::Stretch>,
 );
@@ -194,7 +194,42 @@ impl CircuitData {
         Ok(self_)
     }
 
-    pub fn __reduce__(self_: &Bound<CircuitData>, py: Python<'_>) -> PyResult<PyObject> {
+    /// Put ``self`` into the canonical physical form, with the given number of qubits.
+    ///
+    /// This acts in place, and does not need to traverse the circuit.  It is intended for use when
+    /// the circuit is known to already represent a physical circuit, and we just need to assert
+    /// that it is canonical physical form.
+    ///
+    /// This erases any information about virtual qubits in the :class:`CircuitData`.  Effectively,
+    /// this applies the "trivial" layout mapping virtual qubit 0 to physical qubit 0, and so on.
+    ///
+    /// Args:
+    ///     num_qubits: if given, the total number of physical qubits in the output; it must be at
+    ///         least as large as the number of qubits in the circuit.  If not given, the number of
+    ///         qubits is unchanged.
+    #[pyo3(name = "make_physical", signature = (num_qubits=None))]
+    pub fn py_make_physical(&mut self, num_qubits: Option<u32>) -> PyResult<()> {
+        let num_qubits = match num_qubits {
+            Some(num_qubits) => {
+                if (num_qubits as usize) < self.num_qubits() {
+                    return Err(PyValueError::new_err(format!(
+                        "cannot have fewer physical qubits ({}) than virtual ({})",
+                        num_qubits,
+                        self.num_qubits()
+                    )));
+                }
+                num_qubits
+            }
+            None => self
+                .num_qubits()
+                .try_into()
+                .expect("qubits are stored in 32-bit integers"),
+        };
+        self.make_physical(num_qubits);
+        Ok(())
+    }
+
+    pub fn __reduce__(self_: &Bound<CircuitData>, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let ty: Bound<PyType> = self_.get_type();
         let args = {
             let self_ = self_.borrow();
@@ -241,7 +276,7 @@ impl CircuitData {
         // borrowed_mut.identifier_info =
         //     IndexMap::with_capacity_and_hasher(state.4.len(), RandomState::default());
         borrowed_mut.vars_stretches =
-            VarStretchContainer::from_pickle(slf.py(), state.4, state.5, state.6)?;
+            VarStretchContainer::from_pickle(slf.py(), (state.4, state.5, state.6))?;
 
         Ok(())
     }
@@ -586,6 +621,27 @@ impl CircuitData {
     /// CircuitData: The empty copy like self.
     #[pyo3(signature = (*, vars_mode=VarsMode::Alike))]
     pub fn copy_empty_like(&self, vars_mode: VarsMode) -> PyResult<Self> {
+        self.copy_empty_like_with_capacity(0, vars_mode)
+    }
+
+    /// Performs a copy with no instructions, but reserving the specified capacity for instructions
+    ///
+    /// # Arguments:
+    ///
+    /// * capacity: initial capacity of the instructions vector.
+    /// * vars_mode: specifies realtime variables copy mode.
+    ///     * VarsMode::Alike: variables will be copied following declaration semantics in self.
+    ///     * VarsMode::Captures: variables will be copied as captured variables.
+    ///     * VarsMode::Drop: variables will not be copied.
+    ///
+    /// # Returns:
+    ///
+    /// CircuitData: The empty copy like self.
+    pub fn copy_empty_like_with_capacity(
+        &self,
+        capacity: usize,
+        vars_mode: VarsMode,
+    ) -> PyResult<Self> {
         let mut res = CircuitData::new(
             Some(self.qubits.objects().clone()),
             Some(self.clbits.objects().clone()),
@@ -594,6 +650,7 @@ impl CircuitData {
             self.global_phase.clone(),
         )?;
 
+        res.reserve(capacity);
         res.qargs_interner = self.qargs_interner.clone();
         res.cargs_interner = self.cargs_interner.clone();
 
@@ -821,7 +878,7 @@ impl CircuitData {
     }
 
     // Note: we also rely on this to make us iterable!
-    pub fn __getitem__(&self, py: Python, index: PySequenceIndex) -> PyResult<PyObject> {
+    pub fn __getitem__(&self, py: Python, index: PySequenceIndex) -> PyResult<Py<PyAny>> {
         // Get a single item, assuming the index is validated as in bounds.
         let get_single = |index: usize| {
             let inst = &self.data[index];
@@ -932,7 +989,7 @@ impl CircuitData {
     }
 
     #[pyo3(signature = (index=None))]
-    pub fn pop(&mut self, py: Python<'_>, index: Option<PySequenceIndex>) -> PyResult<PyObject> {
+    pub fn pop(&mut self, py: Python<'_>, index: Option<PySequenceIndex>) -> PyResult<Py<PyAny>> {
         let index = index.unwrap_or(PySequenceIndex::Int(-1));
         let native_index = index.with_len(self.data.len())?;
         let item = self.__getitem__(py, index)?;
@@ -1357,7 +1414,7 @@ impl CircuitData {
 
     /// Returns the variable in the circuit corresponding to the specified name, or None if no such variable.                                                                                                                                                                                                                                                                  Return the variable in the circuit corresponding to the given name, or None if no such variable.
     #[pyo3(name = "get_var")]
-    fn py_get_var(&self, py: Python, name: &str) -> PyResult<PyObject> {
+    fn py_get_var(&self, py: Python, name: &str) -> PyResult<Py<PyAny>> {
         if let Some(var) = self.vars_stretches.get_var(name) {
             var.clone().into_py_any(py)
         } else {
@@ -1451,7 +1508,7 @@ impl CircuitData {
 
     // Returns the stretch  in the circuit corresponding to the specified name, or None if no such variable.
     #[pyo3(name = "get_stretch")]
-    fn py_get_stretch(&self, py: Python, name: &str) -> PyResult<PyObject> {
+    fn py_get_stretch(&self, py: Python, name: &str) -> PyResult<Py<PyAny>> {
         if let Some(stretch) = self.vars_stretches.get_stretch(name) {
             stretch.clone().into_py_any(py)
         } else {
@@ -1720,6 +1777,47 @@ impl CircuitData {
         Ok(res)
     }
 
+    /// Modify `self` to mark its qubits as physical.
+    ///
+    /// This deletes the information about the virtual registers, and replaces it with the single
+    /// (implicitly) physical register.  This method does not need to traverse the circuit.
+    ///
+    /// The qubit indices all stay the same; effectively, this is the application of the "trivial"
+    /// layout.  If the incoming circuit is supposed to be considered physical, this method can be
+    /// used to ensure it is in the canonical physical form.
+    ///
+    /// # Panics
+    ///
+    /// If `num_qubits` is less than the number of qubits in the circuit already.
+    pub fn make_physical(&mut self, num_qubits: u32) {
+        // If this method needs updating, `DAGCircuit::make_physical` probably does too.
+        assert!(
+            num_qubits as usize >= self.num_qubits(),
+            "number of qubits {num_qubits} too small for circuit"
+        );
+        // The strategy here is just to modify the qubit and quantum register objects entirely
+        // inplace; we maintain all relative indices, so we don't need to modify any interner keys.
+        let register = QuantumRegister::new_owning("q", num_qubits);
+        let mut registry = ObjectRegistry::with_capacity(num_qubits as usize);
+        let mut locator = BitLocator::with_capacity(num_qubits as usize);
+        for (index, bit) in register.iter().enumerate() {
+            registry
+                .add(bit.clone(), false)
+                .expect("no duplicates, and in-bounds check already performed");
+            locator.insert(
+                bit,
+                BitLocations::new(index as u32, [(register.clone(), index)]),
+            );
+        }
+        let mut register_data = RegisterData::with_capacity(1);
+        register_data
+            .add_register(register, false)
+            .expect("infallible when 'strict=false'");
+        self.qubits = registry;
+        self.qregs = register_data;
+        self.qubit_indices = locator;
+    }
+
     /// Append a standard gate to this CircuitData
     pub fn push_standard_gate(
         &mut self,
@@ -1918,6 +2016,41 @@ impl CircuitData {
         &self.qargs_interner
     }
 
+    /// Merge the `qargs` in a different [Interner] into this Circuit, remapping the qubits.
+    ///
+    /// This is useful for simplifying the direct mapping of [PackedInstruction]s from one circuit to
+    /// another, like when composing two circuits. See [Interner::merge_map_slice] for more
+    /// information on the mapping function.
+    ///
+    /// The input [InternedMap] is cleared of its previous entries by this method, and then we
+    /// re-use the allocation.
+    pub fn merge_qargs_using(
+        &mut self,
+        other: &Interner<[Qubit]>,
+        map_fn: impl FnMut(&Qubit) -> Option<Qubit>,
+        map: &mut InternedMap<[Qubit]>,
+    ) {
+        // 4 is an arbitrary guess for the amount of stack space to allocate for mapping the
+        // `qargs`, but it doesn't matter if it's too short because it'll safely spill to the heap.
+        self.qargs_interner
+            .merge_map_slice_using::<4>(other, map_fn, map);
+    }
+
+    /// Merge the `qargs` in a different [Interner] into this circuit, remapping the qubits.
+    ///
+    /// This is useful for simplifying the direct mapping of [PackedInstruction]s from one circuit to
+    /// another, like when composing two circuits. See [Interner::merge_map_slice] for more
+    /// information on the mapping function.
+    pub fn merge_qargs(
+        &mut self,
+        other: &Interner<[Qubit]>,
+        map_fn: impl FnMut(&Qubit) -> Option<Qubit>,
+    ) -> InternedMap<[Qubit]> {
+        let mut out = InternedMap::new();
+        self.merge_qargs_using(other, map_fn, &mut out);
+        out
+    }
+
     /// Returns an immutable view of the Interner used for Cargs
     pub fn cargs_interner(&self) -> &Interner<[Clbit]> {
         &self.cargs_interner
@@ -2012,7 +2145,7 @@ impl CircuitData {
                     expr.subs(&map, false)?
                 }
                 Param::Obj(ob) => {
-                    Python::with_gil(|py| {
+                    Python::attach(|py| {
                         // The integer handling is only needed to support the case where an int is
                         // passed in directly instead of a float. This will be handled when we add
                         // int to the param enum to support dt target.
@@ -2101,10 +2234,10 @@ impl CircuitData {
                             // gates. Technically `StandardInstruction::Delay` could, but in
                             // practice that's not a common path, and it's only supported for
                             // backwards compatability from before Stretch was introduced. If we did
-                            // it in rust without Python that's a mistake and this with_gil() call
+                            // it in rust without Python that's a mistake and this attach() call
                             // will panic and point out the error of your ways when this comment is
                             // read.
-                            Python::with_gil(|py| {
+                            Python::attach(|py| {
                                 let validate_parameter_attr = intern!(py, "validate_parameter");
                                 let assign_parameters_attr = intern!(py, "assign_parameters");
 
@@ -2187,7 +2320,7 @@ impl CircuitData {
 
         // handle custom gates, this can only happen in Py-space
         if !user_operations.is_empty() {
-            Python::with_gil(|py| -> PyResult<()> {
+            Python::attach(|py| -> PyResult<()> {
                 let _definition_attr = intern!(py, "_definition");
                 let assign_parameters_attr = intern!(py, "assign_parameters");
 
@@ -2247,6 +2380,24 @@ impl CircuitData {
         &self.vars_stretches
     }
 
+    /// Consume the CircuitData and create an iterator of the [`PackedInstruction`] objects in the
+    /// circuit.
+    pub fn into_data_iter(self) -> impl Iterator<Item = PackedInstruction> {
+        self.data.into_iter()
+    }
+
+    /// Remove the label for an instruction in the circuit
+    ///
+    /// This modifies the circuit in place and sets the label
+    /// field of an instruction to ``None``.
+    ///
+    /// # Arguments
+    ///
+    /// * index: The index of the instruction in the circuit to remove the label of.
+    pub fn invalidate_label(&mut self, index: usize) {
+        self.data[index].label = None;
+    }
+
     /// Append a PackedInstruction to the circuit data.
     ///
     /// # Arguments
@@ -2268,6 +2419,15 @@ impl CircuitData {
             )),
             _ => self.set_global_phase(add_global_phase(&self.global_phase, value)?),
         }
+    }
+
+    /// Return a copy of the circuit with instructions in reverse order
+    pub fn reverse(&self) -> PyResult<Self> {
+        let mut out = self.copy_empty_like_with_capacity(self.data().len(), VarsMode::Alike)?;
+        for inst in self.data().iter().rev() {
+            out.push(inst.clone())?;
+        }
+        Ok(out)
     }
 }
 
