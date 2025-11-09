@@ -569,6 +569,7 @@ impl CircuitData {
                     OperationRef::StandardGate(gate) => gate.into(),
                     OperationRef::StandardInstruction(instruction) => instruction.into(),
                     OperationRef::Unitary(unitary) => unitary.clone().into(),
+                    OperationRef::PauliProductMeasurement(ppm) => ppm.clone().into(),
                 };
                 res.data.push(PackedInstruction {
                     op: new_op,
@@ -589,6 +590,7 @@ impl CircuitData {
                     OperationRef::StandardGate(gate) => gate.into(),
                     OperationRef::StandardInstruction(instruction) => instruction.into(),
                     OperationRef::Unitary(unitary) => unitary.clone().into(),
+                    OperationRef::PauliProductMeasurement(ppm) => ppm.clone().into(),
                 };
                 res.data.push(PackedInstruction {
                     op: new_op,
@@ -914,7 +916,7 @@ impl CircuitData {
         fn set_single(slf: &mut CircuitData, index: usize, value: &Bound<PyAny>) -> PyResult<()> {
             let py = value.py();
             slf.untrack_instruction_parameters(index)?;
-            slf.data[index] = slf.pack(py, &value.downcast::<CircuitInstruction>()?.borrow())?;
+            slf.data[index] = slf.pack(py, &value.cast::<CircuitInstruction>()?.borrow())?;
             slf.track_instruction_parameters(index)?;
             Ok(())
         }
@@ -939,7 +941,7 @@ impl CircuitData {
                     })?
                 } else {
                     for value in values[indices.len()..].iter().rev() {
-                        self.insert(stop as isize, value.downcast()?.borrow())?;
+                        self.insert(stop as isize, value.cast()?.borrow())?;
                     }
                 }
                 Ok(())
@@ -1035,7 +1037,7 @@ impl CircuitData {
     }
 
     pub fn extend(&mut self, itr: &Bound<PyAny>) -> PyResult<()> {
-        if let Ok(other) = itr.downcast::<CircuitData>() {
+        if let Ok(other) = itr.cast::<CircuitData>() {
             let other = other.borrow();
             // Fast path to avoid unnecessary construction of CircuitInstruction instances.
             self.data.reserve(other.data.len());
@@ -1069,7 +1071,7 @@ impl CircuitData {
             return Ok(());
         }
         for v in itr.try_iter()? {
-            self.append(v?.downcast()?)?;
+            self.append(v?.cast()?)?;
         }
         Ok(())
     }
@@ -1097,7 +1099,7 @@ impl CircuitData {
         } else {
             let values = sequence
                 .try_iter()?
-                .map(|ob| Param::extract_no_coerce(&ob?))
+                .map(|ob| Param::extract_no_coerce(ob?.as_borrowed()))
                 .collect::<PyResult<Vec<_>>>()?;
             self.assign_parameters_from_slice(&values)
         }
@@ -1155,7 +1157,7 @@ impl CircuitData {
             return Ok(false);
         }
 
-        if let Ok(other_cd) = other.downcast::<CircuitData>() {
+        if let Ok(other_cd) = other.cast::<CircuitData>() {
             if !slf
                 .getattr("global_phase")?
                 .eq(other_cd.getattr("global_phase")?)?
@@ -2259,24 +2261,28 @@ impl CircuitData {
                                         // to a numeric quantity already, so the match here is
                                         // definitely parameterized.
                                         match &new_param {
-                                            Param::ParameterExpression(expr) => match expr
-                                                .try_to_value(true)
-                                            {
-                                                Ok(_) => {
-                                                    // fully bound, validate parameters
-                                                    Param::extract_no_coerce(&op.call_method1(
-                                                        validate_parameter_attr,
-                                                        (new_param,),
-                                                    )?)?
+                                            Param::ParameterExpression(expr) => {
+                                                match expr.try_to_value(true) {
+                                                    Ok(_) => {
+                                                        // fully bound, validate parameters
+                                                        Param::extract_no_coerce(
+                                                            op.call_method1(
+                                                                validate_parameter_attr,
+                                                                (new_param,),
+                                                            )?
+                                                            .as_borrowed(),
+                                                        )?
+                                                    }
+                                                    Err(_) => new_param, // not bound yet, cannot validate
                                                 }
-                                                Err(_) => new_param, // not bound yet, cannot validate
-                                            },
-                                            new_param => {
-                                                Param::extract_no_coerce(&op.call_method1(
+                                            }
+                                            new_param => Param::extract_no_coerce(
+                                                op.call_method1(
                                                     validate_parameter_attr,
                                                     (new_param,),
-                                                )?)?
-                                            }
+                                                )?
+                                                .as_borrowed(),
+                                            )?,
                                         }
                                     }
                                     Param::Obj(obj) => {
@@ -2285,7 +2291,7 @@ impl CircuitData {
                                             return Err(inconsistent());
                                         }
                                         Param::extract_no_coerce(
-                                            &obj.call_method(
+                                            obj.call_method(
                                                 assign_parameters_attr,
                                                 ([(symbol.clone(), value.as_ref())]
                                                     .into_py_dict(py)?,),
@@ -2293,7 +2299,8 @@ impl CircuitData {
                                                     &[("inplace", false), ("flat_input", true)]
                                                         .into_py_dict(py)?,
                                                 ),
-                                            )?,
+                                            )?
+                                            .as_borrowed(),
                                         )?
                                     }
                                 };
@@ -2435,8 +2442,10 @@ impl CircuitData {
 /// PyO3-provided `FromPyObject` implementations on containers.
 #[repr(transparent)]
 struct AssignParam(Param);
-impl<'py> FromPyObject<'py> for AssignParam {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for AssignParam {
+    type Error = PyErr;
+
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         Ok(Self(Param::extract_no_coerce(ob)?))
     }
 }
@@ -2463,8 +2472,8 @@ fn bit_argument_conversion<B, R>(
     bit_set: &BitLocator<B, R>,
 ) -> PyResult<Vec<B>>
 where
-    B: Debug + Clone + Hash + Eq + for<'py> FromPyObject<'py>,
-    R: Register + Debug + Clone + Hash + for<'py> FromPyObject<'py>,
+    B: Debug + Clone + Hash + Eq + for<'a, 'py> FromPyObject<'a, 'py>,
+    R: Register + Debug + Clone + Hash + for<'a, 'py> FromPyObject<'a, 'py>,
 {
     // The duplication between this function and `_bit_argument_conversion_scalar` is so that fast
     // paths return as quickly as possible, and all valid specifiers will resolve without needing to
@@ -2508,7 +2517,7 @@ where
                 })
                 .collect::<PyResult<_>>();
         }
-        let err_message = if let Ok(bit) = specifier.downcast::<PyBit>() {
+        let err_message = if let Ok(bit) = specifier.cast::<PyBit>() {
             format!(
                 "Incorrect bit type: expected '{}' but got '{}'",
                 stringify!(B),
@@ -2530,8 +2539,8 @@ fn bit_argument_conversion_scalar<B, R>(
     bit_set: &BitLocator<B, R>,
 ) -> PyResult<B>
 where
-    B: Debug + Clone + Hash + Eq + for<'py> FromPyObject<'py>,
-    R: Register + Debug + Clone + Hash + for<'py> FromPyObject<'py>,
+    B: Debug + Clone + Hash + Eq + for<'a, 'py> FromPyObject<'a, 'py>,
+    R: Register + Debug + Clone + Hash + for<'a, 'py> FromPyObject<'a, 'py>,
 {
     if let Ok(bit) = specifier.extract() {
         if bit_set.contains_key(&bit) {
@@ -2558,7 +2567,7 @@ where
             )))
         }
     } else {
-        let err_message = if let Ok(bit) = specifier.downcast::<PyBit>() {
+        let err_message = if let Ok(bit) = specifier.cast::<PyBit>() {
             format!(
                 "Incorrect bit type: expected '{}' but got '{}'",
                 stringify!(B),

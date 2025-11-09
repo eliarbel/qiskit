@@ -274,10 +274,22 @@ impl VarStretchContainer {
             })
     }
 
+    /// Returns the total number of contained variables, regardless of their type
+    #[inline(always)]
+    pub fn total_vars(&self) -> usize {
+        self.vars.len()
+    }
+
     /// Returns the number of contained variables of the specified type.
     #[inline(always)]
     pub fn num_vars(&self, var_type: VarType) -> usize {
         self.var_indices[var_type as usize].len()
+    }
+
+    /// Returns the total number of contained stretches, regardless of their type
+    #[inline(always)]
+    pub fn total_stretches(&self) -> usize {
+        self.stretches.len()
     }
 
     /// Returns the number of contained stretches of the specified type.
@@ -464,7 +476,7 @@ impl VarInfo {
     }
 
     fn from_pickle(ob: &Bound<PyAny>) -> PyResult<Self> {
-        let val_tuple = ob.downcast::<PyTuple>()?;
+        let val_tuple = ob.cast::<PyTuple>()?;
         Ok(VarInfo {
             var: Var(val_tuple.get_item(0)?.extract()?),
             type_: match val_tuple.get_item(1)?.extract::<u8>()? {
@@ -489,7 +501,7 @@ impl StretchInfo {
     }
 
     fn from_pickle(ob: &Bound<PyAny>) -> PyResult<Self> {
-        let val_tuple = ob.downcast::<PyTuple>()?;
+        let val_tuple = ob.cast::<PyTuple>()?;
         Ok(StretchInfo {
             stretch: Stretch(val_tuple.get_item(0)?.extract()?),
             type_: match val_tuple.get_item(1)?.extract::<u8>()? {
@@ -516,7 +528,7 @@ impl IdentifierInfo {
     }
 
     fn from_pickle(ob: &Bound<PyAny>) -> PyResult<Self> {
-        let val_tuple = ob.downcast::<PyTuple>()?;
+        let val_tuple = ob.cast::<PyTuple>()?;
         match val_tuple.get_item(0)?.extract::<u8>()? {
             0 => Ok(IdentifierInfo::Stretch(StretchInfo::from_pickle(
                 &val_tuple.get_item(1)?,
