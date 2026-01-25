@@ -5,8 +5,8 @@
 # specified schedule below.
 name: Nightly Main tests
 on:
-  schedule:
-    - cron: "20 6 * * *"
+#  schedule:
+#    - cron: "20 6 * * *"
   workflow_dispatch:
 
 concurrency:
