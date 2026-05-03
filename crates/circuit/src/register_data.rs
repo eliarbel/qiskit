@@ -66,11 +66,24 @@ impl<R: Register> RegisterIndex<R> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RegisterData<R: Register> {
     reg_index: HashMap<String, RegisterIndex<R>>,
     registers: Vec<R>,
     cached_registers: OnceLock<Py<PyDict>>,
+}
+
+impl<R> Clone for RegisterData<R>
+where
+    R: Register + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            reg_index: self.reg_index.clone(),
+            registers: self.registers.clone(),
+            cached_registers: OnceLock::new(),
+        }
+    }
 }
 
 impl<R> Default for RegisterData<R>

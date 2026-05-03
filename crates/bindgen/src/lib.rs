@@ -97,6 +97,9 @@ pub static EXPORT_RENAME: &[(&str, &str)] = &[
     ("DAGCircuit", "Dag"),
     ("SparseObservable", "Obs"),
     ("StandardGate", "Gate"),
+    ("CControlFlowInstruction", "ControlFlowInstruction"),
+    ("CControlFlowType", "ControlFlowType"),
+    ("CConditionType", "ConditionType"),
 ];
 pub static EXPORT_VERBATIM: &[&str] = &["PyObject"];
 
@@ -228,6 +231,7 @@ pub fn fn_attrs(func: &cbindgen::ir::Function) -> anyhow::Result<FnAttributes> {
 
 /// Generate the cbindgen bindings object for the C-extensions crate.
 pub fn generate_bindings(cext_path: impl AsRef<Path>) -> anyhow::Result<cbindgen::Bindings> {
+    println!("HELLO");
     cbindgen::Builder::new()
         .with_crate(cext_path)
         .with_config(get_config()?)

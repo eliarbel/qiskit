@@ -16,6 +16,7 @@ use crate::circuit_library::pbc::{CPauliProductMeasurement, CPauliProductRotatio
 use crate::dag::COperationKind;
 use crate::exit_codes::ExitCode;
 use crate::pointers::{const_ptr_as_ref, mut_ptr_as_ref};
+use crate::control_flow::CControlFlowInstruction;
 
 use nalgebra::{Matrix2, Matrix4};
 use ndarray::{Array2, ArrayView2};
@@ -29,8 +30,7 @@ use qiskit_circuit::dag_circuit::DAGCircuit;
 use qiskit_circuit::instruction::Parameters;
 use qiskit_circuit::interner::Interner;
 use qiskit_circuit::operations::{
-    ArrayType, DelayUnit, Operation, OperationRef, Param, PauliBased, PauliProductMeasurement,
-    PauliProductRotation, StandardGate, StandardInstruction, UnitaryGate,
+    ArrayType, DelayUnit, Operation, OperationRef, Param, PauliBased, PauliProductMeasurement, PauliProductRotation, StandardGate, StandardInstruction, UnitaryGate
 };
 use qiskit_circuit::packed_instruction::{PackedInstruction, PackedOperation};
 use qiskit_circuit::parameter_table::ParameterTableError;
@@ -2183,4 +2183,34 @@ pub unsafe extern "C" fn qk_circuit_copy_empty_like(
         .copy_empty_like(vars_mode, blocks_mode)
         .expect("Failed to copy the circuit.");
     Box::into_raw(Box::new(copied_circuit))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_circuit_get_control_flow_instruction(
+    circuit: *const CircuitData, 
+    inst_idx: usize,
+    parent_cf: *const CControlFlowInstruction, // enclosing control-flow instruction or null for the top-level circuit
+
+) -> *const CControlFlowInstruction {
+    let circuit = unsafe {const_ptr_as_ref(circuit) };
+    
+    let inst = &circuit.data()[inst_idx];
+
+    // Mapping is done here since we need the circuit context
+    let (qubit_map, clbit_map) = 
+        if parent_cf.is_null() { 
+            (
+                circuit.get_qargs(inst.qubits).iter().map(|q| q.index() as u32).collect(), // TODO: bytemuck
+                circuit.get_cargs(inst.clbits).iter().map(|c| c.index() as u32).collect(),
+            )
+        } else {
+            let parent_cf = unsafe { const_ptr_as_ref(parent_cf) };
+            (
+                circuit.get_qargs(inst.qubits).iter().map(|q| parent_cf.qubit_map[q.index()]).collect(),
+                circuit.get_cargs(inst.clbits).iter().map(|c| parent_cf.clbit_map[c.index()]).collect(),
+            )
+        };
+
+    // TODO: should we ensure that the instruction is control-flow or just assume by documentation?
+    Box::into_raw(Box::new(CControlFlowInstruction::new(inst_idx, qubit_map, clbit_map)))
 }

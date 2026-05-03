@@ -1,0 +1,22 @@
+[build-system]
+requires = [
+    "setuptools>=69", "wheel", 
+    "qiskit @ file:///home/arbel/workspace/wt-c-api-control-flow-view", 
+    "numpy"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my_qiskit_ext"
+version = "0.1.0"
+description = "A minimal Python C extension example"
+requires-python = ">=3.8"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "qiskit @ file:///home/arbel/workspace/wt-c-api-control-flow-view",
+]
