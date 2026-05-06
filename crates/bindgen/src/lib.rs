@@ -100,6 +100,11 @@ pub static EXPORT_RENAME: &[(&str, &str)] = &[
     ("CControlFlowInstruction", "ControlFlowInstruction"),
     ("CControlFlowType", "ControlFlowType"),
     ("CConditionType", "ConditionType"),
+    ("CConditionBit", "ConditionBit"),
+    ("Expr", "ExprNode"),
+    ("CExprNodeType", "ExprNodeType"),
+    ("CBinaryExpr", "BinaryExpr"),
+    ("CBinaryExprOp", "BinaryExprOp"),
 ];
 pub static EXPORT_VERBATIM: &[&str] = &["PyObject"];
 
@@ -181,6 +186,7 @@ fn get_config() -> anyhow::Result<cbindgen::Config> {
         prefix: Some(EXPORT_PREFIX.into()),
         rename,
         renaming_overrides_prefixing: true,
+        exclude: vec!["inner_build_test_expression".to_string()],
         ..Default::default()
     };
     let function = cbindgen::FunctionConfig {

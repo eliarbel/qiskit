@@ -188,7 +188,7 @@ pub struct CircuitData {
     /// Clbits registered in the circuit.
     clbits: ObjectRegistry<Clbit, ShareableClbit>,
     /// Basic blocks registered in the circuit.
-    blocks: ControlFlowBlocks<CircuitData>,
+    blocks: ControlFlowBlocks<CircuitData>, // TODO: put CircuitData inside Box or Arc?
     /// QuantumRegisters stored in the circuit
     qregs: RegisterData<QuantumRegister>,
     /// ClassicalRegisters stored in the circuit

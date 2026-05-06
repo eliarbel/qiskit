@@ -23,6 +23,7 @@ pub mod param;
 pub mod sparse_observable;
 pub mod transpiler;
 pub mod control_flow;
+pub mod classical_expr;
 
 pub use exit_codes::ExitCode;
 

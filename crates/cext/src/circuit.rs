@@ -204,6 +204,22 @@ pub unsafe extern "C" fn qk_classical_register_new(
     Box::into_raw(Box::new(reg))
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_classical_register_name(creg: *const ClassicalRegister) -> *mut c_char {
+    let creg = unsafe { const_ptr_as_ref(creg) };
+
+     CString::new(creg.name())
+        .unwrap()
+        .into_raw()   
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_classical_register_num_bits(creg: *const ClassicalRegister) -> usize {
+    let creg = unsafe { const_ptr_as_ref(creg) };
+
+    creg.len()
+}
+
 /// @ingroup QkCircuit
 /// Add a quantum register to a given quantum circuit
 ///
@@ -2212,5 +2228,5 @@ pub unsafe extern "C" fn qk_circuit_get_control_flow_instruction(
         };
 
     // TODO: should we ensure that the instruction is control-flow or just assume by documentation?
-    Box::into_raw(Box::new(CControlFlowInstruction::new(inst_idx, qubit_map, clbit_map)))
+    Box::into_raw(Box::new(CControlFlowInstruction::new(circuit, inst_idx, qubit_map, clbit_map)))
 }

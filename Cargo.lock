@@ -2289,6 +2289,7 @@ dependencies = [
  "mimalloc",
  "nalgebra 0.34.2",
  "ndarray",
+ "num-bigint",
  "num-complex",
  "pyo3",
  "qiskit-circuit",
@@ -2299,6 +2300,7 @@ dependencies = [
  "rand_pcg 0.10.2",
  "smallvec",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

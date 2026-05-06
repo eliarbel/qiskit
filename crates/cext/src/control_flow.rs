@@ -1,20 +1,24 @@
 use qiskit_circuit::circuit_data::CircuitData;
 use qiskit_circuit::operations::{ControlFlow, ControlFlowInstruction, Condition};
+use qiskit_circuit::classical::expr::Expr;
 
 use crate::pointers::const_ptr_as_ref;
 
 pub struct CControlFlowInstruction { 
-    /// The index of the control flow instruction in its containing circuit
+    /// The circuit this control-flow instruction lives in
+    circuit: *const CircuitData, // TODO: safety caveats!!
+    /// The index of the control flow instruction in the containing circuit
     inst_idx: usize,
     /// Qubit mapping of this instruction qargs w.r.t the top-level circuit
-    pub(crate) qubit_map: Vec<u32>, // TODO: use Qubit? consider using Option (and return NULL in the C API getter)
+    pub(crate) qubit_map: Vec<u32>, // TODO: store Qubit? consider using Option (and return NULL in the C API getter)
     /// Clbit mapping of this instruction qargs w.r.t the top-level circuit
-    pub(crate) clbit_map: Vec<u32>, // TODO: Use Clbit? consider using Option (and return NULL in the C API getter)
+    pub(crate) clbit_map: Vec<u32>, // TODO: store Clbit? consider using Option (and return NULL in the C API getter)
 }
 
 impl CControlFlowInstruction {
-    pub fn new(inst_idx: usize, qubit_map: Vec<u32>, clbit_map: Vec<u32>) -> Self { 
+    pub fn new(circuit: &CircuitData, inst_idx: usize, qubit_map: Vec<u32>, clbit_map: Vec<u32>) -> Self { 
         Self {
+            circuit: circuit as *const CircuitData,
             inst_idx,
             qubit_map,
             clbit_map,
@@ -65,10 +69,16 @@ impl CConditionType {
 }
 
 
+#[repr(C)]
+pub struct CConditionBit {
+    pub clbit: u32, 
+    pub condition: bool,
+}
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_control_flow_type(cf_inst: *const CControlFlowInstruction, circuit: *const CircuitData) -> CControlFlowType {
+pub unsafe extern "C" fn qk_control_flow_type(cf_inst: *const CControlFlowInstruction) -> CControlFlowType {
     let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
-    let circuit = unsafe { const_ptr_as_ref(circuit) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
     let instruction = &circuit.data()[cf_inst.inst_idx];
 
     let cf_inst = instruction.op.try_control_flow().expect("Invalid control flow instruction in the given circuit context");
@@ -77,24 +87,25 @@ pub unsafe extern "C" fn qk_control_flow_type(cf_inst: *const CControlFlowInstru
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_control_flow_num_blocks(cf_inst: *const CControlFlowInstruction, circuit: *const CircuitData) -> usize {
+pub unsafe extern "C" fn qk_control_flow_num_blocks(cf_inst: *const CControlFlowInstruction) -> usize {
     let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
-    let circuit = unsafe { const_ptr_as_ref(circuit) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
     let instruction = &circuit.data()[cf_inst.inst_idx];
 
     instruction.blocks_view().len()
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_control_flow_block_circuit(cf_inst: *const CControlFlowInstruction, circuit: *const CircuitData, block_idx: usize) -> *mut CircuitData {
+pub unsafe extern "C" fn qk_control_flow_block_circuit(cf_inst: *const CControlFlowInstruction, block_idx: usize) -> *const CircuitData {
     let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
-    let circuit = unsafe { const_ptr_as_ref(circuit) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+    
     let instruction = &circuit.data()[cf_inst.inst_idx];
 
-    let blocks = instruction.blocks_view();
-    let block_circuit = &circuit.blocks()[blocks[block_idx]];
-    
-    Box::into_raw(Box::new(block_circuit.clone())) // TODO: use a cheaper clone
+    let block_ids = instruction.blocks_view();
+    // TODO: SAFETY ALERT, SAFETY ALERT!! we need to ensure all CircuitData objects are frozen in memory at this stage
+    &circuit.blocks()[block_ids[block_idx]] as *const CircuitData 
 }
 
 // TODO: document safety": immutable-only view valid as long as cf_inst lives
@@ -115,9 +126,9 @@ pub unsafe extern "C" fn qk_control_flow_clbit_map(cf_inst: *const CControlFlowI
 
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_control_flow_condition_type(cf_inst: *const CControlFlowInstruction, circuit: *const CircuitData) -> CConditionType {
+pub unsafe extern "C" fn qk_control_flow_condition_type(cf_inst: *const CControlFlowInstruction) -> CConditionType {
     let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
-    let circuit = unsafe { const_ptr_as_ref(circuit) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
 
     let inst = &circuit.data()[cf_inst.inst_idx];
     let cf_inst = inst.op.try_control_flow().expect("Invalid control flow instruction in the given circuit context");
@@ -129,10 +140,10 @@ pub unsafe extern "C" fn qk_control_flow_condition_type(cf_inst: *const CControl
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_control_flow_condition(cf_inst: *const CControlFlowInstruction, circuit: *const CircuitData) {
+pub unsafe extern "C" fn qk_control_flow_condition(cf_inst: *const CControlFlowInstruction) {
     let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
-    let circuit = unsafe { const_ptr_as_ref(circuit) };
-    
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
     let inst = &circuit.data()[cf_inst.inst_idx];
 
     match inst.op.view() { 
@@ -158,6 +169,49 @@ pub unsafe extern "C" fn qk_control_flow_condition(cf_inst: *const CControlFlowI
         },
         _ => unimplemented!()
     }
+}
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_condition_bit(cf_inst: *const CControlFlowInstruction, condition: *mut CConditionBit) {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+
+    // let (bit, condition) = match &inst.op.control_flow().control_flow {
+    //     ControlFlow::IfElse{ condition } | 
+    //     ControlFlow::While{ condition } => {
+    //         if let Condition::Bit(bit, cond) = condition {
+                
+    //         } else {
+    //             panic!("A classical bit condition is expected")
+    //         }
+    //     }
+    //     _ => panic!("A control flow instruction with a condition is expected")
+    // };
+    unimplemented!()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_condition_expr(cf_inst: *const CControlFlowInstruction) -> *const Expr {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    let expr = match &inst.op.control_flow().control_flow {
+        ControlFlow::IfElse{ condition } | 
+        ControlFlow::While{ condition } => {
+            if let Condition::Expr(expr) = condition {
+                expr
+            } else {
+                panic!("A classical expression condition is expected")
+            }
+        }
+        _ => panic!("A control flow instruction with a condition is expected")
+    };
+
+    expr as *const Expr
 }
 
 // TODO: add qk_control_flow_*_free functions
