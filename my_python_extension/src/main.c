@@ -10,6 +10,14 @@ static const char* const EXPR_TYPE[] = {"Unary", "Binary", "Cast", "Value", "Var
 
 void print_circuit(const QkCircuit *, unsigned indent, const QkControlFlowInstruction*);
 
+void inspect_register(QkClassicalRegister *creg, unsigned indent) {
+    char *reg_name = qk_classical_register_name(creg);
+
+    printf("%*s CREG: %s\n", indent, "", reg_name);
+
+    qk_str_free(reg_name);
+}
+
 void inspect_expr(const QkExprNode *expr_node, unsigned indent) {
     QkExprNodeType type = qk_expr_node_type(expr_node);
     printf("%*sEXPR type: %s\n", indent, "", EXPR_TYPE[type]);
@@ -26,27 +34,46 @@ void inspect_expr(const QkExprNode *expr_node, unsigned indent) {
             inspect_expr(binary.right, indent + 2);
         }
         break;
-        
+
         default:
-            // TODO:
+            
     }
 }
 
 void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent) {
-    QkControlFlowType cf_type = qk_control_flow_type(cf_inst);
-    printf("%*s CONTROL FLOW: %s\n", indent, ">", CF_OP_NAME[cf_type]);
+    QkControlFlowKind cf_type = qk_control_flow_kind(cf_inst);
+    printf("%*s CONTROL FLOW: %s\n", indent, "[ ] ->", CF_OP_NAME[cf_type]);
 
     switch (cf_type) {
-        case QkControlFlowType_IfElse:
-        case QkControlFlowType_While:
+        case QkControlFlowKind_IfElse:
+        case QkControlFlowKind_While:
             QkConditionType condition_type = qk_control_flow_condition_type(cf_inst);
+
             printf("%*s condition type: %s\n", indent, "", CF_CONDITION_TYPE[condition_type]);
+
             if (condition_type == QkConditionType_Expr) { 
-                // qk_control_flow_condition(cf_inst); // TODO: remove, just for debug print for now
-                inspect_expr(qk_control_flow_condition_expr(cf_inst), indent);
+                const QkExprNode *expr = qk_control_flow_condition_expr(cf_inst);
+                inspect_expr(expr, indent + 2);
+            } else if ( condition_type == QkConditionType_ClBit ) {
+                QkConditionBit cond_bit;
+                qk_control_flow_condition_bit(cf_inst, &cond_bit);
+
+                inspect_register(cond_bit.creg, indent + 2);
+                printf("%*s BIT: %d COND: %d\n", indent + 2, "", 
+                    cond_bit.clbit,
+                    cond_bit.condition);
+
+                qk_control_flow_condition_bit_clear(&cond_bit);
+            } else if ( condition_type == QkConditionType_ClReg ) {
+                QkConditionReg cond_reg;
+                qk_control_flow_condition_register(cf_inst, &cond_reg);
+
+                inspect_register(cond_reg.creg, indent + 2);
+
+                printf("%*s COND: %ld\n", indent + 2, "", cond_reg.condition);
             }
             break;
-        case QkControlFlowType_Box:
+        case QkControlFlowKind_Box:
             break;
         }
 }
@@ -59,8 +86,7 @@ void inspect_control_flow(const QkControlFlowInstruction *cf_inst, unsigned inde
     for (uint32_t block = 0; block < num_blocks; block++) {
         const QkCircuit *block_circuit = qk_control_flow_block_circuit(cf_inst, block);
 
-        size_t num_instructions = qk_circuit_num_instructions(block_circuit);
-        printf("%*s%ld instructions in block #%d\n", indent, "", num_instructions, block);
+        printf("%*sBlock #%d\n", indent, "", block);
         
         print_circuit(block_circuit, indent + 2, cf_inst);
     }
@@ -76,8 +102,11 @@ void print_circuit(const QkCircuit *circuit, unsigned indent, const QkControlFlo
         QkOperationKind kind = qk_circuit_instruction_kind(circuit, inst_idx);
 
         if (kind == QkOperationKind_ControlFlow) {
-            const QkControlFlowInstruction *cf_inst = qk_circuit_get_control_flow_instruction(circuit, inst_idx, parent_cf);
+            QkControlFlowInstruction *cf_inst = qk_circuit_get_control_flow_instruction(circuit, inst_idx, parent_cf);
+
             inspect_control_flow(cf_inst, indent + 2);
+
+            qk_control_flow_instruction_free(cf_inst);
         } else {
             printf("%*s%s ", indent, " ", inst.name);
 

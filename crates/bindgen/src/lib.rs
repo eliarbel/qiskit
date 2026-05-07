@@ -98,9 +98,10 @@ pub static EXPORT_RENAME: &[(&str, &str)] = &[
     ("SparseObservable", "Obs"),
     ("StandardGate", "Gate"),
     ("CControlFlowInstruction", "ControlFlowInstruction"),
-    ("CControlFlowType", "ControlFlowType"),
+    ("CControlFlowKind", "ControlFlowKind"),
     ("CConditionType", "ConditionType"),
     ("CConditionBit", "ConditionBit"),
+    ("CConditionReg", "ConditionReg"),
     ("Expr", "ExprNode"),
     ("CExprNodeType", "ExprNodeType"),
     ("CBinaryExpr", "BinaryExpr"),
@@ -237,7 +238,6 @@ pub fn fn_attrs(func: &cbindgen::ir::Function) -> anyhow::Result<FnAttributes> {
 
 /// Generate the cbindgen bindings object for the C-extensions crate.
 pub fn generate_bindings(cext_path: impl AsRef<Path>) -> anyhow::Result<cbindgen::Bindings> {
-    println!("HELLO");
     cbindgen::Builder::new()
         .with_crate(cext_path)
         .with_config(get_config()?)

@@ -2206,8 +2206,7 @@ pub unsafe extern "C" fn qk_circuit_get_control_flow_instruction(
     circuit: *const CircuitData, 
     inst_idx: usize,
     parent_cf: *const CControlFlowInstruction, // enclosing control-flow instruction or null for the top-level circuit
-
-) -> *const CControlFlowInstruction {
+) -> *mut CControlFlowInstruction {
     let circuit = unsafe {const_ptr_as_ref(circuit) };
     
     let inst = &circuit.data()[inst_idx];
@@ -2229,4 +2228,9 @@ pub unsafe extern "C" fn qk_circuit_get_control_flow_instruction(
 
     // TODO: should we ensure that the instruction is control-flow or just assume by documentation?
     Box::into_raw(Box::new(CControlFlowInstruction::new(circuit, inst_idx, qubit_map, clbit_map)))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_instruction_free(cf_inst: *mut CControlFlowInstruction) {
+    unsafe{ drop(Box::from_raw(cf_inst)) };
 }
