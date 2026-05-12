@@ -3,11 +3,13 @@ use std::ffi::{CString, c_char};
 
 use qiskit_circuit::bit::ClassicalRegister;
 use qiskit_circuit::circuit_data::CircuitData;
-use qiskit_circuit::operations::{BoxDuration, Condition, ControlFlow, ControlFlowInstruction, ForCollection};
+use qiskit_circuit::operations::{BoxDuration, CaseSpecifier, Condition, ControlFlow, ControlFlowInstruction, ForCollection, SwitchTarget};
 use qiskit_circuit::classical::expr::Expr;
 
 use crate::classical_expr::CDurationInfo;
 use crate::pointers::{const_ptr_as_ref, mut_ptr_as_ref};
+use num_traits::ToPrimitive;
+
 
 pub struct CControlFlowInstruction { 
     /// The circuit this control-flow instruction lives in
@@ -73,10 +75,20 @@ impl From<&Condition> for CConditionType {
     }
 }
 
+impl From<&SwitchTarget> for CConditionType {
+    fn from(value: &SwitchTarget) -> Self {
+        match value {
+            SwitchTarget::Bit(_) => Self::ClBit, 
+            SwitchTarget::Register(_) => Self::ClReg,
+            SwitchTarget::Expr(_) => Self::Expr,
+        }
+    }
+}
+
 
 #[repr(C)]
-pub struct CConditionBit {
-    creg: *mut ClassicalRegister, 
+pub struct CConditionBit { 
+    creg: *mut ClassicalRegister,  // TODO: too much... simplify (just return the bit)
     /// The clbit within the classical register the condition corresponds to
     pub clbit: u32, 
     pub condition: bool,
@@ -95,6 +107,15 @@ pub enum CBoxDurationType {
     Duration = 1,
     Expr = 2,
 }
+
+
+#[repr(C)] 
+pub struct CSwitchCaseLabels{
+    labels: *const u64,
+    num_labels: usize,
+}
+
+
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn qk_control_flow_kind(cf_inst: *const CControlFlowInstruction) -> CControlFlowKind {
@@ -373,6 +394,120 @@ pub unsafe extern "C" fn qk_control_flow_loop_symbol(cf_inst: *const CControlFlo
 
     unsafe{ *out_name = name };
     index
+}
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_target_type(cf_inst: *const CControlFlowInstruction) -> CConditionType {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { target, ..}, ..})
+         = inst.op.try_control_flow() else { panic!("Expected a switch case instruction") };
+
+    CConditionType::from(target)
+
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_target_bit(cf_inst: *const CControlFlowInstruction) -> i64 {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { target: SwitchTarget::Bit(clbit), .. }, ..})
+         = inst.op.try_control_flow() else { return -1; };
+
+    let Some(clbit) = circuit.clbit_index(clbit) else { return -1; };
+
+    clbit as i64
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_target_register(cf_inst: *const CControlFlowInstruction) -> *const ClassicalRegister {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { target: SwitchTarget::Register(reg), .. }, ..})
+         = inst.op.try_control_flow() else { return ptr::null(); };
+
+    reg as *const ClassicalRegister
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_target_expr(cf_inst: *const CControlFlowInstruction) -> *const Expr {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { target: SwitchTarget::Expr(expr), .. }, ..})
+         = inst.op.try_control_flow() else { return ptr::null(); };
+
+    expr as *const Expr
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_num_cases(cf_inst: *const CControlFlowInstruction) -> u32 {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { cases, .. }, ..})
+         = inst.op.try_control_flow() else { return 0; };
+
+    *cases
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_is_case_default(cf_inst: *const CControlFlowInstruction, case_idx: usize) -> bool {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { label_spec, .. }, ..})
+         = inst.op.try_control_flow() else { return false; };
+        
+    matches!(label_spec[case_idx].first(), Some(CaseSpecifier::Default))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_case_labels(cf_inst: *const CControlFlowInstruction, 
+    case_idx: usize, out_labels: *mut CSwitchCaseLabels ) {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    
+    let Some(ControlFlowInstruction{control_flow: ControlFlow::Switch { label_spec, .. }, ..})
+         = inst.op.try_control_flow() else { panic!("") };
+
+    // TODO: panic if the case is the default case
+    let labels = label_spec[case_idx]
+                .iter()
+                .filter_map(|l| {
+                    if let CaseSpecifier::Uint(label) = l {
+                        label.to_u64()
+                    } else {None} // TODO: silently skips Default, which shouldn't be there. Do we test it somewhere?
+                })
+                .collect::<Vec<u64>>()
+                .into_boxed_slice();
+
+    let out_case_labels = unsafe{ mut_ptr_as_ref(out_labels) };
+    out_case_labels.num_labels = labels.len();
+    out_case_labels.labels = Box::into_raw(labels) as *const u64;
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_switch_case_labels_clear(labels: *mut CSwitchCaseLabels) {
+    // TODO: implement
 }
 
 // TODO: add qk_control_flow_*_free functions

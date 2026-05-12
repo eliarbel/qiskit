@@ -13,13 +13,13 @@ static const char* const DURATION_TYPE[] = {"Dt","Ps", "Ns", "Us", "Ms", "S"};
 
 void print_circuit(const QkCircuit *, unsigned indent, const QkControlFlowInstruction*);
 
-// void inspect_register(QkClassicalRegister *creg, unsigned indent) {
-//     char *reg_name = qk_classical_register_name(creg);
+void inspect_register(const QkClassicalRegister *creg, unsigned indent) {
+    char *reg_name = qk_classical_register_name(creg);
 
-//     printf("%*s CREG: %s\n", indent, "", reg_name);
+    printf("%*sCREG: %s\n", indent, "", reg_name);
 
-//     qk_str_free(reg_name);
-// }
+    qk_str_free(reg_name);
+}
 
 void inspect_expr(const QkExprNode *expr_node, unsigned indent) {
     // TODO: complete all the Expr inspection
@@ -124,7 +124,38 @@ void inspect_for_loop(const QkControlFlowInstruction *cf_inst, unsigned indent) 
 }
 
 void inspect_switch(const QkControlFlowInstruction *cf_inst, unsigned indent) {
+    QkConditionType target_type = qk_control_flow_switch_target_type(cf_inst);
 
+    switch (target_type) {
+    case QkConditionType_ClBit:
+        int64_t bit = qk_control_flow_switch_target_bit(cf_inst);
+        printf("%*sBit: %ld\n", indent, "", bit);
+        break;
+    case QkConditionType_ClReg:
+        const QkClassicalRegister *creg = qk_control_flow_switch_target_register(cf_inst);
+        inspect_register(creg, indent + 2);
+        break;
+    case QkConditionType_Expr:
+        const QkExprNode *expr = qk_control_flow_switch_target_expr(cf_inst);
+        inspect_expr(expr, indent + 2);
+        break;    
+    }
+
+    uint32_t num_cases = qk_control_flow_switch_num_cases(cf_inst);
+    for(uint32_t case_idx = 0; case_idx < num_cases; case_idx++) {
+        printf("%*sCASE: ", indent, "");
+        if (qk_control_flow_switch_is_case_default(cf_inst, case_idx) ) 
+            printf("Default");
+        else {
+            QkSwitchCaseLabels labels;
+            qk_control_flow_switch_case_labels(cf_inst, case_idx, &labels);
+            for (size_t label = 0; label < labels.num_labels; label++) {
+                printf("%ld ", labels.labels[label]);
+            }
+            qk_control_flow_switch_case_labels_clear(&labels);
+        }
+        printf("\n");
+    }
 }
 
 void inspect_control_flow(const QkControlFlowInstruction *cf_inst, unsigned indent) { 
