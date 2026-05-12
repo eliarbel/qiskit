@@ -73,7 +73,7 @@ impl Primitive {
             Self::I8 => "ctypes.c_int8",
             Self::U8 => "ctypes.c_uint8",
             Self::I16 => "ctypes.c_int16",
-            Self::U16 => "ctypes.c_uin16",
+            Self::U16 => "ctypes.c_uint16",
             Self::I32 => "ctypes.c_int32",
             Self::U32 => "ctypes.c_uint32",
             Self::I64 => "ctypes.c_int64",
@@ -428,12 +428,61 @@ impl Struct {
     }
 }
 
+
+/// A transparent union type to be declared
+#[derive(Clone, Debug)]
+pub struct Union {
+    /// The export name of the union.
+    pub name: String,
+    /// The fields. 
+    pub fields: Vec<(String, Type)>,
+
+}
+
+impl Union {
+    pub fn try_from_cbindgen(
+        val: &ir::Union,
+        mut override_fn: impl FnMut(&str) -> Option<Primitive>,
+    ) -> anyhow::Result<Self> {
+        let fields = val
+            .fields
+            .iter()
+            .map(|field| -> anyhow::Result<_> {
+                Ok((
+                    field.name.clone(),
+                    Type::try_from_cbindgen(&field.ty, &mut override_fn)?,
+                ))
+            })
+            .collect::<anyhow::Result<_>>()?;
+        Ok(Self {
+            name: val.export_name.clone(),
+            fields,
+        })
+    }
+
+    /// Get a string representing the declaration of this `union`` as a Python `ctypes.Union`.
+    pub fn declare(&self) -> String {
+        let mut out = format!("\nclass {}(ctypes.Union):\n", &self.name);
+        out.push_str("    _fields_ = [\n");
+        for (name, ty) in &self.fields {
+            out.push_str("        (\"");
+            out.push_str(name);
+            out.push_str("\", ");
+            ty.render(&mut out);
+            out.push_str("),\n");
+        }
+        out.push_str("    ]");
+        out
+    }
+}
+
 /// All of the items to export to a `ctypes` file.
 #[derive(Clone, Debug, Default)]
 pub struct Items {
     pub enums: Vec<Enum>,
     pub structs: Vec<Struct>,
     pub functions: Vec<Function>,
+    pub unions: Vec<Union>,
 }
 impl Items {
     /// Imports that are needed for our own declarations to work.
@@ -464,9 +513,13 @@ impl Items {
                         overrides.get(path).copied()
                     })?)
                 }
+                ir::ItemContainer::Union(item) => {
+                    self.unions.push(Union::try_from_cbindgen(item, |path| {
+                        overrides.get(path).copied()
+                    })?);
+                },
                 ir::ItemContainer::Constant(_)
                 | ir::ItemContainer::Static(_)
-                | ir::ItemContainer::Union(_)
                 | ir::ItemContainer::Typedef(_) => {
                     bail!("unhandled item: {item:?}");
                 }
@@ -498,6 +551,9 @@ impl Items {
         for val in &self.enums {
             writeln!(out, "    \"{}\",", &val.name)?;
         }
+        for val in &self.unions {
+           writeln!(out, "    \"{}\",\n", val.name)?;
+        }
         for val in &self.structs {
             writeln!(out, "    \"{}\",", &val.name)?;
         }
@@ -525,6 +581,9 @@ impl Items {
 
         writeln!(out)?;
         for item in &self.enums {
+            writeln!(out, "{}", item.declare())?;
+        }
+        for item in &self.unions {
             writeln!(out, "{}", item.declare())?;
         }
         for item in &self.structs {

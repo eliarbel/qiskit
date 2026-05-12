@@ -251,9 +251,15 @@ impl From<&Duration> for CDurationType {
 }
 
 #[repr(C)]
+pub union CDurationValue {
+    dt: i64,
+    time: f64,
+}
+
+#[repr(C)]
 pub struct CDurationInfo {
     pub ty: CDurationType,
-    pub time: f64, // TODO: a stopgap for dt, since we can't use unions
+    pub value: CDurationValue,
 }
 
 impl From<&Duration> for CDurationInfo {
@@ -261,27 +267,27 @@ impl From<&Duration> for CDurationInfo {
         match duration {
             Duration::dt(v) => CDurationInfo {
                 ty: CDurationType::Dt,
-                time: *v as f64,
+                value: CDurationValue{dt: *v},
             },
             Duration::ps(v) => CDurationInfo {
                 ty: CDurationType::Ps,
-                time: *v,
+                value: CDurationValue{time: *v},
             },
             Duration::ns(v) => CDurationInfo {
                 ty: CDurationType::Ns,
-                time: *v,
+                value: CDurationValue{time: *v},
             },
             Duration::us(v) => CDurationInfo {
                 ty: CDurationType::Us,
-                time: *v,
+                value: CDurationValue{time: *v},
             },
             Duration::ms(v) => CDurationInfo {
                 ty: CDurationType::Ms,
-                time: *v,
+                value: CDurationValue{time: *v},
             },
             Duration::s(v) => CDurationInfo {
                 ty: CDurationType::S,
-                time: *v,
+                value: CDurationValue{time: *v},
             },
         }
     }
@@ -290,12 +296,12 @@ impl From<&Duration> for CDurationInfo {
 impl CDurationInfo {
     pub fn to_duration(&self) -> Duration {
         match self.ty {
-            CDurationType::Dt => Duration::dt(self.time as i64),
-            CDurationType::Ps => Duration::ps(self.time),
-            CDurationType::Ns => Duration::ns(self.time),
-            CDurationType::Us => Duration::us(self.time),
-            CDurationType::Ms => Duration::ms(self.time),
-            CDurationType::S => Duration::s(self.time),
+            CDurationType::Dt => Duration::dt(unsafe{self.value.dt}),
+            CDurationType::Ps => Duration::ps(unsafe{self.value.time}),
+            CDurationType::Ns => Duration::ns(unsafe{self.value.time}),
+            CDurationType::Us => Duration::us(unsafe{self.value.time}),
+            CDurationType::Ms => Duration::ms(unsafe{self.value.time}),
+            CDurationType::S => Duration::s(unsafe{self.value.time}),
         }
     }
 }
