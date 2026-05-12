@@ -210,7 +210,7 @@ pub unsafe extern "C" fn qk_classical_register_name(creg: *const ClassicalRegist
 
      CString::new(creg.name())
         .unwrap()
-        .into_raw()   
+        .into_raw()
 }
 
 #[unsafe(no_mangle)]

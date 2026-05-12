@@ -2291,6 +2291,7 @@ dependencies = [
  "ndarray",
  "num-bigint",
  "num-complex",
+ "num-traits",
  "pyo3",
  "qiskit-circuit",
  "qiskit-circuit-library",

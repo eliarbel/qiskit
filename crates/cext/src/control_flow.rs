@@ -40,9 +40,9 @@ pub enum CControlFlowKind {
     While = 6,
 }
 
-impl CControlFlowKind { 
-    fn from_control_flow_instruction(cf_inst: &ControlFlowInstruction) -> Self {
-        match cf_inst.control_flow {
+impl From<&ControlFlowInstruction> for CControlFlowKind { 
+    fn from(value: &ControlFlowInstruction) -> Self {
+        match value.control_flow {
             ControlFlow::Box {..} => Self::Box,
             ControlFlow::BreakLoop => Self::BreakLoop,
             ControlFlow::ContinueLoop => Self::ContinueLoop,
@@ -61,9 +61,9 @@ pub enum CConditionType {
     Expr = 2, 
 }
 
-impl CConditionType {
-    pub fn from_condition(condition: &Condition) -> Self {
-        match condition {
+impl From<&Condition> for CConditionType {
+    fn from(value: &Condition) -> Self {
+        match value {
             Condition::Bit(_,_) => Self::ClBit,
             Condition::Register(_,_) => Self::ClReg,
             Condition::Expr(_) => Self::Expr,
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn qk_control_flow_kind(cf_inst: *const CControlFlowInstru
 
     let cf_inst = instruction.op.try_control_flow().expect("Invalid control flow instruction in the given circuit context");
 
-    CControlFlowKind::from_control_flow_instruction(cf_inst)
+    CControlFlowKind::from(cf_inst)
 }
 
 #[unsafe(no_mangle)]
@@ -147,7 +147,7 @@ pub unsafe extern "C" fn qk_control_flow_condition_type(cf_inst: *const CControl
     let cf_inst = inst.op.try_control_flow().expect("Invalid control flow instruction in the given circuit context");
 
     match &cf_inst.control_flow {
-        ControlFlow::IfElse { condition } | ControlFlow::While { condition } => CConditionType::from_condition(condition),
+        ControlFlow::IfElse { condition } | ControlFlow::While { condition } => CConditionType::from(condition),
         _ => panic!("Control flow instruction without a condition")
     }
 }

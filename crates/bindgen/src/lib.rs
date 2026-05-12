@@ -97,16 +97,29 @@ pub static EXPORT_RENAME: &[(&str, &str)] = &[
     ("DAGCircuit", "Dag"),
     ("SparseObservable", "Obs"),
     ("StandardGate", "Gate"),
+    // Control flow types
     ("CControlFlowInstruction", "ControlFlowInstruction"),
     ("CControlFlowKind", "ControlFlowKind"),
     ("CConditionType", "ConditionType"),
     ("CConditionBit", "ConditionBit"),
     ("CConditionReg", "ConditionReg"),
+    // Classical expression types
     ("Expr", "ExprNode"),
-    ("CExprNodeType", "ExprNodeType"),
+    ("CExprNodeKind", "ExprNodeKind"),
     ("CBinaryExpr", "BinaryExpr"),
     ("CBinaryExprOp", "BinaryExprOp"),
+    ("CUnaryExpr", "UnaryExpr"),
+    ("CUnaryOp", "UnaryOp"),
+    ("CCastExpr", "CastExpr"),
+    ("CIndexExpr", "IndexExpr"),
+    ("CExprType", "ExprType"),
+    ("CExprTypeInfo", "ExprTypeInfo"),
+    ("CDurationType", "DurationType"),
+    ("CDurationInfo", "DurationInfo"),
+    ("CDurationValue", "DurationValue"),
+    ("CValueType", "ValueType"),
 ];
+
 pub static EXPORT_VERBATIM: &[&str] = &["PyObject"];
 
 // Defined in `qiskit/attributes.h`.

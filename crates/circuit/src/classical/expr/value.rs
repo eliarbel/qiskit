@@ -23,7 +23,7 @@ use pyo3::{IntoPyObjectExt, intern};
 pub enum Value {
     Duration(Duration),
     Float { raw: f64, ty: Type },
-    Uint { raw: BigUint, ty: Type },
+    Uint { raw: BigUint, ty: Type }, // TODO: should we have an BigUint support in utils?
 }
 
 impl<'py> IntoPyObject<'py> for Value {
