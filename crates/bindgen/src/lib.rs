@@ -103,6 +103,7 @@ pub static EXPORT_RENAME: &[(&str, &str)] = &[
     ("CConditionType", "ConditionType"),
     ("CConditionBit", "ConditionBit"),
     ("CConditionReg", "ConditionReg"),
+    ("CBoxDurationType", "BoxDurationType"),
     // Classical expression types
     ("Expr", "ExprNode"),
     ("CExprNodeKind", "ExprNodeKind"),

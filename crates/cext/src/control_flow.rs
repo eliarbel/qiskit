@@ -1,10 +1,12 @@
 use std::ptr;
+use std::ffi::{CString, c_char};
 
 use qiskit_circuit::bit::ClassicalRegister;
 use qiskit_circuit::circuit_data::CircuitData;
-use qiskit_circuit::operations::{ControlFlow, ControlFlowInstruction, Condition};
+use qiskit_circuit::operations::{BoxDuration, Condition, ControlFlow, ControlFlowInstruction, ForCollection};
 use qiskit_circuit::classical::expr::Expr;
 
+use crate::classical_expr::CDurationInfo;
 use crate::pointers::{const_ptr_as_ref, mut_ptr_as_ref};
 
 pub struct CControlFlowInstruction { 
@@ -87,6 +89,12 @@ pub struct CConditionReg { // TODO: add _clear function
     pub condition: u64, // TODO: represent BigUint instead
 }
 
+#[repr(u8)]
+pub enum CBoxDurationType {
+    NoDuration = 0, 
+    Duration = 1,
+    Expr = 2,
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn qk_control_flow_kind(cf_inst: *const CControlFlowInstruction) -> CControlFlowKind {
@@ -253,6 +261,118 @@ pub unsafe extern "C" fn qk_control_flow_condition_expr(cf_inst: *const CControl
     };
 
     expr as *const Expr
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_box_duration_type(cf_inst: *const CControlFlowInstruction) -> CBoxDurationType {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    let cf_inst = inst.op.try_control_flow().expect("Invalid control flow instruction in the given circuit context");
+
+    match &cf_inst.control_flow {
+        ControlFlow::Box { duration, .. } => {
+            match duration {
+                None => CBoxDurationType::NoDuration,
+                Some(BoxDuration::Duration(_)) => CBoxDurationType::Duration,
+                Some(BoxDuration::Expr(_)) => CBoxDurationType::Expr,
+            }
+        }
+        _ => panic!("Expected a Box control flow instruction"),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_box_duration(
+    cf_inst: *const CControlFlowInstruction,
+    out_duration: *mut CDurationInfo
+) -> bool {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    let cf_inst = inst.op.try_control_flow()
+        .expect("Invalid control flow instruction");
+
+    match &cf_inst.control_flow {
+        ControlFlow::Box { duration, .. } => {
+            match duration {
+                Some(qiskit_circuit::operations::BoxDuration::Duration(dur)) => {
+                    let out = unsafe { mut_ptr_as_ref(out_duration) };
+                    *out = CDurationInfo::from(dur);
+                    true
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_box_duration_expr(
+    cf_inst: *const CControlFlowInstruction
+) -> *const Expr {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    let cf_inst = inst.op.try_control_flow()
+        .expect("Invalid control flow instruction");
+
+    match &cf_inst.control_flow {
+        ControlFlow::Box { duration, .. } => {
+            match duration {
+                Some(qiskit_circuit::operations::BoxDuration::Expr(expr)) => {
+                    expr as *const Expr
+                }
+                _ => std::ptr::null(),
+            }
+        }
+        _ => std::ptr::null(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_loop_collection(cf_inst: *const CControlFlowInstruction, out_collection: *mut *const usize) -> usize {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    let cf_inst = inst.op.try_control_flow()
+        .expect("Invalid control flow instruction");
+    
+    if let ControlFlow::ForLoop { collection: ForCollection::List(elems), .. } = &cf_inst.control_flow {
+        unsafe{ *out_collection = elems.as_ptr() };
+        elems.len()
+    } else {
+        0
+    }
+}
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_control_flow_loop_symbol(cf_inst: *const CControlFlowInstruction, out_name: *mut *mut c_char) -> i64 {
+    let cf_inst = unsafe { const_ptr_as_ref(cf_inst) };
+    let circuit = unsafe { const_ptr_as_ref(cf_inst.circuit) };
+
+    let inst = &circuit.data()[cf_inst.inst_idx];
+    let cf_inst = inst.op.try_control_flow()
+        .expect("Invalid control flow instruction");
+    
+    let (name, index) = if let ControlFlow::ForLoop {loop_param: Some(symbol), .. } = &cf_inst.control_flow {
+        (
+            CString::new(symbol.name())
+                .map_or(std::ptr::null_mut(), |name| name.into_raw()),
+            symbol.index.map_or(-1, |i| i as i64)
+        )
+    } else {
+        (ptr::null_mut(), -1)            
+    };
+
+    unsafe{ *out_name = name };
+    index
 }
 
 // TODO: add qk_control_flow_*_free functions

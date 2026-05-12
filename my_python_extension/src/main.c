@@ -4,31 +4,35 @@
 #define QISKIT_C_PYTHON_INTERFACE
 #include <qiskit.h>
 
+
 static const char* const CF_OP_NAME[] = {"Box", "BreakLoop", "ContinueLoop", "ForLoop", "IfElse", "Switch", "While"};
 static const char* const CF_CONDITION_TYPE[] = {"Bit", "Reg", "Expr"};
-static const char* const EXPR_TYPE[] = {"Unary", "Binary", "Cast", "Value", "Var", "Stretch", "Index"};
+static const char* const EXPR_KIND[] = {"Unary", "Binary", "Cast", "Value", "Var", "Stretch", "Index"};
+static const char* const EXPR_TYPE[] = {"Bool", "Duration", "Float", "Uint"};
+static const char* const DURATION_TYPE[] = {"Dt","Ps", "Ns", "Us", "Ms", "S"}; 
 
 void print_circuit(const QkCircuit *, unsigned indent, const QkControlFlowInstruction*);
 
-void inspect_register(QkClassicalRegister *creg, unsigned indent) {
-    char *reg_name = qk_classical_register_name(creg);
+// void inspect_register(QkClassicalRegister *creg, unsigned indent) {
+//     char *reg_name = qk_classical_register_name(creg);
 
-    printf("%*s CREG: %s\n", indent, "", reg_name);
+//     printf("%*s CREG: %s\n", indent, "", reg_name);
 
-    qk_str_free(reg_name);
-}
+//     qk_str_free(reg_name);
+// }
 
 void inspect_expr(const QkExprNode *expr_node, unsigned indent) {
-    QkExprNodeType type = qk_expr_node_type(expr_node);
-    printf("%*sEXPR type: %s\n", indent, "", EXPR_TYPE[type]);
+    // TODO: complete all the Expr inspection
+    QkExprNodeKind kind = qk_expr_node_kind(expr_node);
+    printf("%*sEXPR type: %s\n", indent, "", EXPR_KIND[kind]);
 
-    switch (type) {
-        case QkExprNodeType_Binary:
+    switch (kind) {
+        case QkExprNodeKind_Binary:
         {
             QkBinaryExpr binary;
-            qk_expr_binary(expr_node, &binary);
+            qk_expr_as_binary(expr_node, &binary);
 
-            printf("%*s BINARY: %d, %d, %d\n", indent, "", binary.op, binary.ty, binary.constant);
+            printf("%*s BINARY: %d, %s, %d\n", indent, "", binary.op, EXPR_TYPE[binary.ty.ty], binary.constant);
             
             inspect_expr(binary.left, indent + 2);
             inspect_expr(binary.right, indent + 2);
@@ -41,8 +45,7 @@ void inspect_expr(const QkExprNode *expr_node, unsigned indent) {
 }
 
 void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent) {
-    QkControlFlowKind cf_type = qk_control_flow_kind(cf_inst);
-    printf("%*s CONTROL FLOW: %s\n", indent, "[ ] ->", CF_OP_NAME[cf_type]);
+    QkControlFlowKind cf_type = qk_control_flow_kind(cf_inst);    
 
     switch (cf_type) {
         case QkControlFlowKind_IfElse:
@@ -52,13 +55,13 @@ void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent)
             printf("%*s condition type: %s\n", indent, "", CF_CONDITION_TYPE[condition_type]);
 
             if (condition_type == QkConditionType_Expr) { 
-                const QkExprNode *expr = qk_control_flow_condition_expr(cf_inst);
-                inspect_expr(expr, indent + 2);
+                // const QkExprNode *expr = qk_control_flow_condition_expr(cf_inst);
+                // inspect_expr(expr, indent + 2);
             } else if ( condition_type == QkConditionType_ClBit ) {
                 QkConditionBit cond_bit;
                 qk_control_flow_condition_bit(cf_inst, &cond_bit);
 
-                inspect_register(cond_bit.creg, indent + 2);
+                // inspect_register(cond_bit.creg, indent + 2);
                 printf("%*s BIT: %d COND: %d\n", indent + 2, "", 
                     cond_bit.clbit,
                     cond_bit.condition);
@@ -68,7 +71,7 @@ void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent)
                 QkConditionReg cond_reg;
                 qk_control_flow_condition_register(cf_inst, &cond_reg);
 
-                inspect_register(cond_reg.creg, indent + 2);
+                // inspect_register(cond_reg.creg, indent + 2);
 
                 printf("%*s COND: %ld\n", indent + 2, "", cond_reg.condition);
             }
@@ -78,8 +81,76 @@ void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent)
         }
 }
 
+void inspect_box(const QkControlFlowInstruction *cf_inst, unsigned indent) {
+    QkBoxDurationType duration_type = qk_control_flow_box_duration_type(cf_inst);
+    switch (duration_type) {
+    case QkBoxDurationType_NoDuration: 
+        printf("%*s No Duration info\n", indent, "");
+        break;
+    case QkBoxDurationType_Duration: 
+        QkDurationInfo duration_info;
+        qk_control_flow_box_duration(cf_inst, &duration_info);
+        printf("%*s Duration type: %s Value: ", indent, "", DURATION_TYPE[duration_info.ty]);
+        if (duration_info.ty == QkDurationType_Dt)
+            printf("%ld\n", duration_info.value.dt);
+        else
+            printf("%lf\n", duration_info.value.time);
+        break;
+    case QkBoxDurationType_Expr:
+        const QkExprNode *expr = qk_control_flow_box_duration_expr(cf_inst);
+        inspect_expr(expr, indent + 2);        
+        break;
+    }
+}
+
+void inspect_for_loop(const QkControlFlowInstruction *cf_inst, unsigned indent) {
+    size_t const* elements;
+    size_t num_elements = qk_control_flow_loop_collection(cf_inst, &elements);
+    printf("%*s Elements: ", indent, "");
+    for (size_t i = 0; i < num_elements; i++)
+        printf("%ld ", elements[i]);
+    printf("\n");
+
+    char *symbol; 
+    int64_t index = qk_control_flow_loop_symbol(cf_inst, &symbol);
+
+    if ( symbol != NULL ) {
+        printf("%*s Symbol: %s\n", indent, "", symbol);
+        qk_str_free(symbol);
+    }
+    if ( index >= 0) {
+        printf("%*s Index: %ld\n", indent, "", index);
+    }
+}
+
+void inspect_switch(const QkControlFlowInstruction *cf_inst, unsigned indent) {
+
+}
+
 void inspect_control_flow(const QkControlFlowInstruction *cf_inst, unsigned indent) { 
-    inspect_condition(cf_inst, indent);
+    QkControlFlowKind cf_type = qk_control_flow_kind(cf_inst);
+    printf("%*s CONTROL FLOW: %s\n", indent, "[ ]", CF_OP_NAME[cf_type]);
+
+    switch (cf_type) {
+        case QkControlFlowKind_Box:
+            inspect_box(cf_inst, indent + 2);
+            break;
+        case QkControlFlowKind_BreakLoop:
+            break;
+        case QkControlFlowKind_ContinueLoop:
+            break;
+        case QkControlFlowKind_ForLoop:
+            inspect_for_loop(cf_inst, indent + 2);
+            break;
+        case QkControlFlowKind_IfElse:
+        case QkControlFlowKind_While:
+            inspect_condition(cf_inst, indent + 2);
+            break;
+        case QkControlFlowKind_Switch:
+            inspect_switch(cf_inst, indent + 2);
+            break;
+    }
+
 
     uint32_t num_blocks = qk_control_flow_num_blocks(cf_inst);
 
