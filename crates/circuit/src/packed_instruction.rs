@@ -790,7 +790,7 @@ impl Drop for PackedOperation {
 ///
 /// A `PackedInstruction` in general cannot be safely mutated outside the context of its
 /// `CircuitData`, because the majority of the data is not actually stored here.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PackedInstruction {
     pub op: PackedOperation,
     /// The index under which the interner has stored `qubits`.
@@ -812,20 +812,6 @@ pub struct PackedInstruction {
     /// We can revisit once we're on PyO3 0.22+ and have been able to disable its `py-clone`
     /// feature.
     pub py_op: OnceLock<Py<PyAny>>,
-}
-
-impl Clone for PackedInstruction {
-    fn clone(&self) -> Self {
-        Self { 
-            op: self.op.clone(),
-            qubits: self.qubits.clone(),
-            clbits: self.clbits.clone(),
-            params: self.params.clone(),
-            label: self.label.clone(),
-            #[cfg(feature = "cache_pygates")]
-            py_op: OnceLock::new(),
-        }
-    }
 }
 
 impl PackedInstruction {

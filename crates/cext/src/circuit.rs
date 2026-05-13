@@ -215,13 +215,6 @@ pub unsafe extern "C" fn qk_classical_register_name(creg: *const ClassicalRegist
 
 // TODO: we might want to add a function to return the owning register given a circuit qubit index
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_classical_register_num_bits(creg: *const ClassicalRegister) -> usize {
-    let creg = unsafe { const_ptr_as_ref(creg) };
-
-    creg.len()
-}
-
 /// @ingroup QkCircuit
 /// Add a quantum register to a given quantum circuit
 ///

@@ -165,28 +165,14 @@ impl<T: Debug> From<AbsentObject<T>> for PyErr {
 /// If type parameter `B` implements [IntoPyObject], then a cached [PyList]
 /// is maintained and accessible via [ObjectRegistry::cached] and [ObjectRegistry::cached_raw],
 /// which contains the unique objects, in the order they were first registered.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ObjectRegistry<T, B> {
     /// Registered objects.
     objects: Vec<B>,
     /// Maps objects to native index.
     indices: HashMap<B, T>,
     /// The objects registered, cached as a PyList.
-    cached: OnceLock<Py<PyList>>, // TODO: this should become optional in a python-independent compile
-}
-
-impl<T, B> Clone for ObjectRegistry<T, B>
-where
-    T: Clone,
-    B: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            objects: self.objects.clone(),
-            indices: self.indices.clone(),
-            cached: OnceLock::new(),
-        }
-    }
+    cached: OnceLock<Py<PyList>>,
 }
 
 impl<T, B> Default for ObjectRegistry<T, B>
