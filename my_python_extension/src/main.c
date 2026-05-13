@@ -58,20 +58,18 @@ void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent)
                 // const QkExprNode *expr = qk_control_flow_condition_expr(cf_inst);
                 // inspect_expr(expr, indent + 2);
             } else if ( condition_type == QkConditionType_ClBit ) {
-                QkConditionBit cond_bit;
+                QkConditionBitInfo cond_bit;
                 qk_control_flow_condition_bit(cf_inst, &cond_bit);
 
                 // inspect_register(cond_bit.creg, indent + 2);
                 printf("%*s BIT: %d COND: %d\n", indent + 2, "", 
                     cond_bit.clbit,
                     cond_bit.condition);
-
-                qk_control_flow_condition_bit_clear(&cond_bit);
             } else if ( condition_type == QkConditionType_ClReg ) {
-                QkConditionReg cond_reg;
+                QkConditionRegInfo cond_reg;
                 qk_control_flow_condition_register(cf_inst, &cond_reg);
 
-                // inspect_register(cond_reg.creg, indent + 2);
+                inspect_register(cond_reg.creg, indent + 2);
 
                 printf("%*s COND: %ld\n", indent + 2, "", cond_reg.condition);
             }
@@ -89,7 +87,7 @@ void inspect_box(const QkControlFlowInstruction *cf_inst, unsigned indent) {
         break;
     case QkBoxDurationType_Duration: 
         QkDurationInfo duration_info;
-        qk_control_flow_box_duration(cf_inst, &duration_info);
+        qk_control_flow_box_duration_info(cf_inst, &duration_info);
         printf("%*s Duration type: %s Value: ", indent, "", DURATION_TYPE[duration_info.ty]);
         if (duration_info.ty == QkDurationType_Dt)
             printf("%ld\n", duration_info.value.dt);
