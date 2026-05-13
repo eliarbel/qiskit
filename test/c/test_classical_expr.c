@@ -53,11 +53,7 @@ static int test_var(void) {
     }
 
     const QkVar *extracted_var = NULL;
-    if (!qk_expr_as_var(var_expr, &extracted_var)) {
-        fprintf(stderr, "Failed to extract var from expression\n");
-        result = RuntimeError;
-        goto clear_var_expr;
-    }
+    qk_expr_as_var(var_expr, &extracted_var);
 
     char *name = qk_var_name(extracted_var);
     if (strcmp(name, "my_var") != 0) {
@@ -101,11 +97,7 @@ static int test_stretch(void) {
     }
 
     const QkStretch *extracted_stretch = NULL;
-    if (!qk_expr_as_stretch(stretch_expr, &extracted_stretch)) {
-        fprintf(stderr, "Failed to extract stretch from expression\n");
-        result = RuntimeError;
-        goto clear_stretch_expr;
-    }
+    qk_expr_as_stretch(stretch_expr, &extracted_stretch);
 
     char *extracted_name = qk_stretch_name(extracted_stretch);
     if (strcmp(extracted_name, "my_stretch") != 0) {
@@ -136,19 +128,9 @@ static int test_value(void) {
     }
 
     const QkValue *extracted_val = NULL;
-    if (!qk_expr_as_value(float_expr, &extracted_val)) {
-        fprintf(stderr, "Failed to extract float value from expression\n");
-        result = RuntimeError;
-        goto clear_float_expr;
-    }
+    qk_expr_as_value(float_expr, &extracted_val);
 
-    double extracted_float;
-    if (!qk_expr_value_float(extracted_val, &extracted_float)) {
-        fprintf(stderr, "Failed to extract float from value\n");
-        result = RuntimeError;
-        goto clear_float_expr;
-    }
-
+    double extracted_float = qk_value_float(extracted_val);
     if (extracted_float != 3.14) {
         fprintf(stderr, "Float value mismatch: expected 3.14, got %f\n", extracted_float);
         result = EqualityError;
@@ -158,19 +140,9 @@ static int test_value(void) {
     QkValue *uint_val = qk_value_new_uint(42, 8);
     QkExprNode *uint_expr = qk_value_as_expr(uint_val);
     const QkValue *extracted_uint_val = NULL;
-    if (!qk_expr_as_value(uint_expr, &extracted_uint_val)) {
-        fprintf(stderr, "Failed to extract uint value from expression\n");
-        result = RuntimeError;
-        goto clear_uint_expr;
-    }
+    qk_expr_as_value(uint_expr, &extracted_uint_val);
 
-    uint64_t extracted_uint;
-    if (!qk_expr_value_uint(extracted_uint_val, &extracted_uint)) {
-        fprintf(stderr, "Failed to extract uint from value\n");
-        result = RuntimeError;
-        goto clear_uint_expr;
-    }
-
+    uint64_t extracted_uint = qk_value_uint(extracted_uint_val);
     if (extracted_uint != 42) {
         fprintf(stderr, "Uint value mismatch: expected 42, got %lu\n", (unsigned long)extracted_uint);
         result = EqualityError;
@@ -179,32 +151,22 @@ static int test_value(void) {
 
     QkDurationInfo dur_info = {
         .ty = QkDurationType_Ns,
-        .time = 100.0
+        .value.time = 100.0
     };
     QkValue *dur_val = qk_value_new_duration(&dur_info);
     QkExprNode *dur_expr = qk_value_as_expr(dur_val);
     const QkValue *extracted_dur_val = NULL;
-    if (!qk_expr_as_value(dur_expr, &extracted_dur_val)) {
-        fprintf(stderr, "Failed to extract duration value from expression\n");
-        result = RuntimeError;
-        goto clear_dur_expr;
-    }
+    qk_expr_as_value(dur_expr, &extracted_dur_val);
 
-    QkDurationInfo extracted_dur_info;
-    if (!qk_expr_value_duration(extracted_dur_val, &extracted_dur_info)) {
-        fprintf(stderr, "Failed to extract duration from value\n");
-        result = RuntimeError;
-        goto clear_dur_expr;
-    }
+    QkDurationInfo extracted_dur_info  = qk_value_duration_info(extracted_dur_val);
 
     if (extracted_dur_info.ty != QkDurationType_Ns ||
-        extracted_dur_info.time != 100.0) {
+        extracted_dur_info.value.time != 100.0) {
         fprintf(stderr, "Duration value mismatch: expected type=%d time=100.0, got type=%d time=%f\n",
-                QkDurationType_Ns, extracted_dur_info.ty, extracted_dur_info.time);
+                QkDurationType_Ns, extracted_dur_info.ty, extracted_dur_info.value.time);
         result = EqualityError;
     }
 
-clear_dur_expr:
     qk_expr_free(dur_expr);
     qk_value_free(dur_val);
 clear_uint_expr:
@@ -231,12 +193,7 @@ static int test_expr_structs(void) {
         QkExprNode *expr = qk_expr_binary_new(op, v1Expr, v2Expr, &type_info);
         
         QkBinaryExpr binary;
-        if (!qk_expr_as_binary(expr, &binary)) {
-            fprintf(stderr, "Failed to extract binary expression for operator %u\n", op);
-            result = RuntimeError;
-            qk_expr_free(expr);
-            goto cleanup;
-        }
+        qk_expr_as_binary(expr, &binary);
         
         if (binary.op != op) {
             fprintf(stderr, "Binary operator mismatch for op %u: expected %u, got %u\n",
@@ -276,12 +233,7 @@ static int test_expr_structs(void) {
         QkExprNode *expr = qk_expr_unary_new(op, v1Expr, &type_info);
         
         QkUnaryExpr unary;
-        if (!qk_expr_as_unary(expr, &unary)) {
-            fprintf(stderr, "Failed to extract unary expression for operator %u\n", op);
-            result = RuntimeError;
-            qk_expr_free(expr);
-            goto cleanup;
-        }
+        qk_expr_as_unary(expr, &unary);
         
         if (unary.op != op) {
             fprintf(stderr, "Unary operator mismatch for op %u: expected %u, got %u\n",
@@ -322,12 +274,7 @@ static int test_expr_structs(void) {
     QkExprNode *cast_expr = qk_expr_cast_new(v1Expr, &target_type);
     
     QkCastExpr cast;
-    if (!qk_expr_as_cast(cast_expr, &cast)) {
-        fprintf(stderr, "Failed to extract cast expression\n");
-        result = RuntimeError;
-        qk_expr_free(cast_expr);
-        goto cleanup;
-    }
+    qk_expr_as_cast(cast_expr, &cast);
     
     if (cast.operand != v1Expr) {
         fprintf(stderr, "Cast operand mismatch: operand=%p (expected %p)\n",
@@ -360,14 +307,7 @@ static int test_expr_structs(void) {
     QkExprNode *index_expr = qk_expr_index_new(v1Expr, index_val_expr, &type_info);
     
     QkIndexExpr index;
-    if (!qk_expr_as_index(index_expr, &index)) {
-        fprintf(stderr, "Failed to extract index expression\n");
-        result = RuntimeError;
-        qk_expr_free(index_expr);
-        qk_expr_free(index_val_expr);
-        qk_value_free(index_val);
-        goto cleanup;
-    }
+    qk_expr_as_index(index_expr, &index);
     
     if (index.target != v1Expr) {
         fprintf(stderr, "Index target mismatch: target=%p (expected %p)\n",

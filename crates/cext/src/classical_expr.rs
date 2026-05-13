@@ -81,13 +81,13 @@ impl From<&Type> for CExprTypeInfo {
 
 
 #[repr(u8)]
-pub enum CUnaryOp {
+pub enum CUnaryOpType {
     BitNot = 1, // TODO: keeping it one-based on purpose, to avoid confusion with the convention in Python
     LogicNot = 2,
     Negate = 3,
 }
 
-impl From<UnaryOp> for CUnaryOp {
+impl From<UnaryOp> for CUnaryOpType {
     fn from(value: UnaryOp) -> Self {
         match value { 
         UnaryOp::BitNot => Self::BitNot,
@@ -97,26 +97,26 @@ impl From<UnaryOp> for CUnaryOp {
     }
 }
 
-impl CUnaryOp {
+impl CUnaryOpType {
     fn to_unary_op(self) -> UnaryOp {
         match self {
-            CUnaryOp::BitNot => UnaryOp::BitNot,
-            CUnaryOp::LogicNot => UnaryOp::LogicNot,
-            CUnaryOp::Negate => UnaryOp::Negate,
+            CUnaryOpType::BitNot => UnaryOp::BitNot,
+            CUnaryOpType::LogicNot => UnaryOp::LogicNot,
+            CUnaryOpType::Negate => UnaryOp::Negate,
         }
     }
 }
 
 #[repr(C)]
 pub struct CUnaryExpr {
-    pub op: CUnaryOp,
+    pub op: CUnaryOpType,
     pub operand: *const Expr,
     pub ty: CExprTypeInfo,
     pub constant: bool,
 }
 
 #[repr(u8)]
-pub enum CBinaryExprOp {
+pub enum CBinaryOpType {
     BitAnd = 1, // TODO: keeping it one-based on purpose, to avoid confusion with the convention in Python
     BitOr = 2,
     BitXor = 3,
@@ -136,7 +136,7 @@ pub enum CBinaryExprOp {
     Div = 17,
 }
 
-impl From<BinaryOp> for CBinaryExprOp {
+impl From<BinaryOp> for CBinaryOpType {
     fn from(value: BinaryOp) -> Self {
         match value {
             BinaryOp::BitAnd => Self::BitAnd,
@@ -160,26 +160,26 @@ impl From<BinaryOp> for CBinaryExprOp {
     }
 }
 
-impl CBinaryExprOp {
+impl CBinaryOpType {
     fn to_binary_op(self) -> BinaryOp {
         match self {
-            CBinaryExprOp::BitAnd => BinaryOp::BitAnd,
-            CBinaryExprOp::BitOr => BinaryOp::BitOr,
-            CBinaryExprOp::BitXor => BinaryOp::BitXor,
-            CBinaryExprOp::LogicAnd => BinaryOp::LogicAnd,
-            CBinaryExprOp::LogicOr => BinaryOp::LogicOr,
-            CBinaryExprOp::Equal => BinaryOp::Equal,
-            CBinaryExprOp::NotEqual => BinaryOp::NotEqual,
-            CBinaryExprOp::Less => BinaryOp::Less,
-            CBinaryExprOp::LessEqual => BinaryOp::LessEqual,
-            CBinaryExprOp::Greater => BinaryOp::Greater,
-            CBinaryExprOp::GreaterEqual => BinaryOp::GreaterEqual,
-            CBinaryExprOp::ShiftLeft => BinaryOp::ShiftLeft,
-            CBinaryExprOp::ShiftRight => BinaryOp::ShiftRight,
-            CBinaryExprOp::Add => BinaryOp::Add,
-            CBinaryExprOp::Sub => BinaryOp::Sub,
-            CBinaryExprOp::Mul => BinaryOp::Mul,
-            CBinaryExprOp::Div => BinaryOp::Div,
+            CBinaryOpType::BitAnd => BinaryOp::BitAnd,
+            CBinaryOpType::BitOr => BinaryOp::BitOr,
+            CBinaryOpType::BitXor => BinaryOp::BitXor,
+            CBinaryOpType::LogicAnd => BinaryOp::LogicAnd,
+            CBinaryOpType::LogicOr => BinaryOp::LogicOr,
+            CBinaryOpType::Equal => BinaryOp::Equal,
+            CBinaryOpType::NotEqual => BinaryOp::NotEqual,
+            CBinaryOpType::Less => BinaryOp::Less,
+            CBinaryOpType::LessEqual => BinaryOp::LessEqual,
+            CBinaryOpType::Greater => BinaryOp::Greater,
+            CBinaryOpType::GreaterEqual => BinaryOp::GreaterEqual,
+            CBinaryOpType::ShiftLeft => BinaryOp::ShiftLeft,
+            CBinaryOpType::ShiftRight => BinaryOp::ShiftRight,
+            CBinaryOpType::Add => BinaryOp::Add,
+            CBinaryOpType::Sub => BinaryOp::Sub,
+            CBinaryOpType::Mul => BinaryOp::Mul,
+            CBinaryOpType::Div => BinaryOp::Div,
         }
     }
 }
@@ -188,7 +188,7 @@ impl CBinaryExprOp {
 
 #[repr(C)]
 pub struct CBinaryExpr {
-    pub op: CBinaryExprOp,
+    pub op: CBinaryOpType,
     pub left: *const Expr,
     pub right: *const Expr,
     pub ty: CExprTypeInfo,
@@ -315,47 +315,43 @@ pub unsafe extern "C" fn qk_expr_node_kind(expr: *const Expr) -> CExprNodeKind {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_binary(expr: *const Expr, out_binary: *mut CBinaryExpr) -> bool {
+pub unsafe extern "C" fn qk_expr_as_binary(expr: *const Expr, out_binary: *mut CBinaryExpr) {
     let expr = unsafe{ const_ptr_as_ref(expr) };
 
     let Expr::Binary(binary) = expr else {
-        return false;
+        panic!("TODO");
     }; 
 
     let out_binary = unsafe { mut_ptr_as_ref(out_binary) };
-    out_binary.op = CBinaryExprOp::from(binary.op);
+    out_binary.op = CBinaryOpType::from(binary.op);
     out_binary.left = &binary.left as *const Expr;
     out_binary.right = &binary.right as *const Expr;
     out_binary.ty = CExprTypeInfo::from(&binary.ty);
     out_binary.constant = binary.constant;
-    
-    true
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_unary(expr: *const Expr, out_unary: *mut CUnaryExpr) -> bool {
+pub unsafe extern "C" fn qk_expr_as_unary(expr: *const Expr, out_unary: *mut CUnaryExpr) {
     let expr = unsafe { const_ptr_as_ref(expr) };
 
     let Expr::Unary(unary) = expr else {
-        return false;
+        panic!("TODO");
     };
 
     let out_unary = unsafe { mut_ptr_as_ref(out_unary) };
     
-    out_unary.op = CUnaryOp::from(unary.op);
+    out_unary.op = CUnaryOpType::from(unary.op);
     out_unary.operand = &unary.operand as *const Expr;
     out_unary.ty = CExprTypeInfo::from(&unary.ty);
     out_unary.constant = unary.constant;
-    
-    true
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_cast(expr: *const Expr, out_cast: *mut CCastExpr) -> bool {
+pub unsafe extern "C" fn qk_expr_as_cast(expr: *const Expr, out_cast: *mut CCastExpr) {
     let expr = unsafe { const_ptr_as_ref(expr) };
 
     let Expr::Cast(cast) = expr else {
-        return false;
+        panic!("TODO");
     };
 
     let out_cast = unsafe { mut_ptr_as_ref(out_cast) };
@@ -364,16 +360,14 @@ pub unsafe extern "C" fn qk_expr_as_cast(expr: *const Expr, out_cast: *mut CCast
     out_cast.ty = CExprTypeInfo::from(&cast.ty);
     out_cast.constant = cast.constant;
     out_cast.implicit = cast.implicit;
-    
-    true
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_index(expr: *const Expr, out_index: *mut CIndexExpr) -> bool {
+pub unsafe extern "C" fn qk_expr_as_index(expr: *const Expr, out_index: *mut CIndexExpr) {
     let expr = unsafe { const_ptr_as_ref(expr) };
 
     let Expr::Index(index) = expr else {
-        return false;
+        panic!("TODO");
     };
 
     let out_index = unsafe { mut_ptr_as_ref(out_index) };
@@ -382,21 +376,39 @@ pub unsafe extern "C" fn qk_expr_as_index(expr: *const Expr, out_index: *mut CIn
     out_index.index = &index.index as *const Expr;
     out_index.ty = CExprTypeInfo::from(&index.ty);
     out_index.constant = index.constant;
-    
-    true
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_value(expr: *const Expr, value: *mut *const Value) -> bool {
+pub unsafe extern "C" fn qk_expr_as_value(expr: *const Expr, value: *mut *const Value) {
     let expr = unsafe { const_ptr_as_ref(expr) };
 
     let Expr::Value(val) = expr else {
-        return false;
+        panic!("TODO");
     };
 
     unsafe { *value = val as *const Value };
-    
-    true
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_expr_as_var(expr: *const Expr, out_var: *mut *const Var) {
+    let expr = unsafe { const_ptr_as_ref(expr) };
+
+    let Expr::Var(var) = expr else {
+        panic!("TODO")
+    };
+
+    unsafe { *out_var = var as *const Var };
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_expr_as_stretch(expr: *const Expr, out_stretch: *mut *const Stretch) {
+    let expr = unsafe { const_ptr_as_ref(expr) };
+
+    let Expr::Stretch(stretch) = expr else {
+        panic!("TODO")
+    };
+
+    unsafe { *out_stretch = stretch as *const Stretch };
 }
 
 
@@ -405,81 +417,159 @@ pub unsafe extern "C" fn qk_expr_value_type(expr: *const Expr) -> CValueType {
     let expr = unsafe { const_ptr_as_ref(expr) };
     
     let Expr::Value(value) = expr else {
-        panic!("Expected Value expression"); // TODO: change all functions to return bool instead of panicking
+        panic!("Expected Value expression");
     };
     
     CValueType::from(value)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_value_duration(value: *const Value, out_info: *mut CDurationInfo) -> bool {
+pub unsafe extern "C" fn qk_value_duration_info(value: *const Value) -> CDurationInfo {
     let value = unsafe { const_ptr_as_ref(value) };
     
     let Value::Duration(duration) = value else {
-        return false;
+        panic!("TODO")
     };
     
-    unsafe { *out_info = CDurationInfo::from(duration) };
-    
-    true
+    CDurationInfo::from(duration)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_value_float(value: *const Value, out_val: *mut f64) -> bool {
+pub unsafe extern "C" fn qk_value_float(value: *const Value) -> f64{
     let value = unsafe { const_ptr_as_ref(value) };
     
     let Value::Float{raw, ..} = value else { // TODO: what should we do with ty?
-        return false;
+        panic!("TODO")
     };
 
-    unsafe { *out_val = *raw };
-
-    true
+    *raw
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_value_uint(value: *const Value, out_uint: *mut u64) -> bool {
+pub unsafe extern "C" fn qk_value_uint(value: *const Value) -> u64 {
     let value = unsafe { const_ptr_as_ref(value) };
     
     let Value::Uint { raw, .. } = value else { // TODO: what should we do with ty?
-        return false;
+        panic!("TODO")
     };
 
-    let uint = raw.to_u64().expect("BigUint value larger than u64::MAX are not supported currently"); // TODO: is there a better way?
-    unsafe{ *out_uint = uint };
-
-    true
+    raw.to_u64()
+        .expect("BigUint value larger than u64::MAX are not supported currently") // TODO: is there a better way?
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_var(expr: *const Expr, out_var: *mut *const Var) -> bool {
-    let expr = unsafe { const_ptr_as_ref(expr) };
+pub unsafe extern "C" fn qk_var_name(var: *const Var) -> *mut c_char {
+    let var = unsafe { const_ptr_as_ref(var) };
+    let Var::Standalone { name, .. } = var else { panic!("TODO") };
 
-    let Expr::Var(var) = expr else {
-        return false;
-    };
+    CString::new(name.as_str())
+        .map_or(std::ptr::null_mut(), |name| name.into_raw()) // TODO: panic if can't construct name
+}
 
-    unsafe { *out_var = var as *const Var };
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_var_type_info(var: *const Var) -> CExprTypeInfo {
+    let var = unsafe { const_ptr_as_ref(var) };
+    let Var::Standalone { ty, .. } = var else { panic!("Expected a standalone variable") };
+
+    let width = if let Type::Uint(width) = ty {*width} else {0u16};
+
+    CExprTypeInfo{ty: CExprType::from(ty), width: width}
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_var_as_expr(var: *const Var) -> *mut Expr {
+    let var = unsafe{ const_ptr_as_ref(var) };
+    Box::into_raw(Box::new(Expr::Var(var.clone())))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_stretch_name(stretch: *const Stretch) -> *mut c_char {
+    let stretch = unsafe { const_ptr_as_ref(stretch) };
     
-    true
+    CString::new(stretch.name.as_str())
+        .map_or(std::ptr::null_mut(), |name| name.into_raw())
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_as_stretch(expr: *const Expr, out_stretch: *mut *const Stretch) -> bool {
-    let expr = unsafe { const_ptr_as_ref(expr) };
+pub unsafe extern "C" fn qk_stretch_as_expr(stretch: *const Stretch) -> *mut Expr {
+    let stretch = unsafe { const_ptr_as_ref(stretch) };
+    Box::into_raw(Box::new(Expr::Stretch(stretch.clone())))
+}
 
-    let Expr::Stretch(stretch) = expr else {
-        return false;
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_var_new(name: *const c_char, type_info: *const CExprTypeInfo) -> *mut Var {
+    let name = unsafe {
+        CStr::from_ptr(name)
+            .to_str()
+            .expect("Invalid UTF-8 character")
+            .to_string()
     };
 
-    unsafe { *out_stretch = stretch as *const Stretch };
-    
-    true
+    let type_info = unsafe {const_ptr_as_ref(type_info)} ;
+
+    let var = Var::Standalone { uuid: Uuid::new_v4().as_u128(), name, ty: type_info.to_type() };
+    Box::into_raw(Box::new(var))
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_var_free(var: *mut Var) {
+    let var = unsafe { mut_ptr_as_ref(var) };
+    drop( unsafe{ Box::from_raw(var) } );
+}
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_binary_new(op: CBinaryExprOp, left: *const Expr, right: *const Expr, type_info: *const CExprTypeInfo) -> *mut Expr {
+pub unsafe extern "C" fn qk_stretch_new(name: *const c_char) -> *mut Stretch {
+    let name = unsafe {
+        CStr::from_ptr(name)
+            .to_str()
+            .expect("Invalid UTF-8 character")
+            .to_string()
+    };
+
+    let stretch = Stretch {
+        uuid: Uuid::new_v4().as_u128(),
+        name,
+    };
+    
+    Box::into_raw(Box::new(stretch))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_stretch_free(stretch: *mut Stretch) {
+    drop(unsafe { Box::from_raw(stretch) });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_value_new_duration(duration: *const CDurationInfo) -> *mut Value {
+    let duration = unsafe { const_ptr_as_ref(duration) };
+
+    Box::into_raw(Box::new(Value::Duration(duration.to_duration())))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_value_new_float(val: f64) -> *mut Value {
+
+    Box::into_raw(Box::new(Value::Float { raw: val, ty: Type::Float }))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_value_new_uint(val: u64, width: u16) -> *mut Value {
+    Box::into_raw(Box::new(Value::Uint { raw: BigUint::from(val), ty: Type::Uint(width) }))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_value_free(value: *mut Value) {
+    drop( unsafe{Box::from_raw(value) } );
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_value_as_expr(value: *const Value) -> *mut Expr {
+    let value = unsafe { const_ptr_as_ref(value) };
+    Box::into_raw(Box::new(Expr::Value(value.clone())))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qk_expr_binary_new(op: CBinaryOpType, left: *const Expr, right: *const Expr, type_info: *const CExprTypeInfo) -> *mut Expr {
     let left = unsafe { const_ptr_as_ref(left) };
     let right = unsafe { const_ptr_as_ref(right) };
     let type_info = unsafe { const_ptr_as_ref(type_info) };
@@ -496,7 +586,7 @@ pub unsafe extern "C" fn qk_expr_binary_new(op: CBinaryExprOp, left: *const Expr
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_expr_unary_new(op: CUnaryOp, operand: *const Expr, type_info: *const CExprTypeInfo,) -> *mut Expr {
+pub unsafe extern "C" fn qk_expr_unary_new(op: CUnaryOpType, operand: *const Expr, type_info: *const CExprTypeInfo,) -> *mut Expr {
     let operand = unsafe { const_ptr_as_ref(operand) };
     let type_info = unsafe { const_ptr_as_ref(type_info) };
 
@@ -545,120 +635,6 @@ pub unsafe extern "C" fn qk_expr_index_new(target: *const Expr, index: *const Ex
 pub unsafe extern "C" fn qk_expr_free(expr: *mut Expr) {
     drop( unsafe{Box::from_raw(expr)});
 }
-
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_var_new(name: *const c_char, type_info: *const CExprTypeInfo) -> *mut Var {
-    let name = unsafe {
-        CStr::from_ptr(name)
-            .to_str()
-            .expect("Invalid UTF-8 character")
-            .to_string()
-    };
-
-    let type_info = unsafe {const_ptr_as_ref(type_info)} ;
-
-    let var = Var::Standalone { uuid: Uuid::new_v4().as_u128(), name, ty: type_info.to_type() };
-    Box::into_raw(Box::new(var))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_var_name(var: *const Var) -> *mut c_char {
-    let var = unsafe { const_ptr_as_ref(var) };
-    let Var::Standalone { name, .. } = var else { return std::ptr::null_mut(); };
-
-    CString::new(name.as_str())
-        .map_or(std::ptr::null_mut(), |name| name.into_raw())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_var_type_info(var: *const Var) -> CExprTypeInfo {
-    let var = unsafe { const_ptr_as_ref(var) };
-    let Var::Standalone { ty, .. } = var else { panic!("Expected a standalone variable") };
-
-    let width = if let Type::Uint(width) = ty {*width} else {0u16};
-
-    CExprTypeInfo{ty: CExprType::from(ty), width: width}
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_var_free(var: *mut Var) {
-    let var = unsafe { mut_ptr_as_ref(var) };
-    drop( unsafe{ Box::from_raw(var) } );
-}
-
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_var_as_expr(var: *const Var) -> *mut Expr {
-    let var = unsafe{ const_ptr_as_ref(var) };
-    Box::into_raw(Box::new(Expr::Var(var.clone())))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_stretch_new(name: *const c_char) -> *mut Stretch {
-    let name = unsafe {
-        CStr::from_ptr(name)
-            .to_str()
-            .expect("Invalid UTF-8 character")
-            .to_string()
-    };
-
-    let stretch = Stretch {
-        uuid: Uuid::new_v4().as_u128(),
-        name,
-    };
-    
-    Box::into_raw(Box::new(stretch))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_stretch_name(stretch: *const Stretch) -> *mut c_char {
-    let stretch = unsafe { const_ptr_as_ref(stretch) };
-    
-    CString::new(stretch.name.as_str())
-        .map_or(std::ptr::null_mut(), |name| name.into_raw())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_stretch_free(stretch: *mut Stretch) {
-    drop(unsafe { Box::from_raw(stretch) });
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_stretch_as_expr(stretch: *const Stretch) -> *mut Expr {
-    let stretch = unsafe { const_ptr_as_ref(stretch) };
-    Box::into_raw(Box::new(Expr::Stretch(stretch.clone())))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_value_new_duration(duration: *const CDurationInfo) -> *mut Value {
-    let duration = unsafe { const_ptr_as_ref(duration) };
-
-    Box::into_raw(Box::new(Value::Duration(duration.to_duration())))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_value_new_float(val: f64) -> *mut Value {
-
-    Box::into_raw(Box::new(Value::Float { raw: val, ty: Type::Float }))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_value_new_uint(val: u64, width: u16) -> *mut Value {
-    Box::into_raw(Box::new(Value::Uint { raw: BigUint::from(val), ty: Type::Uint(width) }))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_value_free(value: *mut Value) {
-    drop( unsafe{Box::from_raw(value) } );
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn qk_value_as_expr(value: *const Value) -> *mut Expr {
-    let value = unsafe { const_ptr_as_ref(value) };
-    Box::into_raw(Box::new(Expr::Value(value.clone())))
-}
-
 
 
 #[unsafe(no_mangle)]
