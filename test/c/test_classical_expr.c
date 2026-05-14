@@ -52,8 +52,7 @@ static int test_var(void) {
         goto clear_var_expr;
     }
 
-    const QkVar *extracted_var = NULL;
-    qk_expr_as_var(var_expr, &extracted_var);
+    const QkVar *extracted_var = qk_expr_as_var(var_expr);
 
     char *name = qk_var_name(extracted_var);
     if (strcmp(name, "my_var") != 0) {
@@ -96,8 +95,7 @@ static int test_stretch(void) {
         goto clear_stretch_expr;
     }
 
-    const QkStretch *extracted_stretch = NULL;
-    qk_expr_as_stretch(stretch_expr, &extracted_stretch);
+    const QkStretch *extracted_stretch = qk_expr_as_stretch(stretch_expr);
 
     char *extracted_name = qk_stretch_name(extracted_stretch);
     if (strcmp(extracted_name, "my_stretch") != 0) {
@@ -127,8 +125,7 @@ static int test_value(void) {
         goto clear_float_expr;
     }
 
-    const QkValue *extracted_val = NULL;
-    qk_expr_as_value(float_expr, &extracted_val);
+    const QkValue *extracted_val = qk_expr_as_value(float_expr);
 
     double extracted_float = qk_value_float(extracted_val);
     if (extracted_float != 3.14) {
@@ -139,8 +136,7 @@ static int test_value(void) {
 
     QkValue *uint_val = qk_value_new_uint(42, 8);
     QkExprNode *uint_expr = qk_value_as_expr(uint_val);
-    const QkValue *extracted_uint_val = NULL;
-    qk_expr_as_value(uint_expr, &extracted_uint_val);
+    const QkValue *extracted_uint_val = qk_expr_as_value(uint_expr);
 
     uint64_t extracted_uint = qk_value_uint(extracted_uint_val);
     if (extracted_uint != 42) {
@@ -155,8 +151,7 @@ static int test_value(void) {
     };
     QkValue *dur_val = qk_value_new_duration(&dur_info);
     QkExprNode *dur_expr = qk_value_as_expr(dur_val);
-    const QkValue *extracted_dur_val = NULL;
-    qk_expr_as_value(dur_expr, &extracted_dur_val);
+    const QkValue *extracted_dur_val = qk_expr_as_value(dur_expr);
 
     QkDurationInfo extracted_dur_info  = qk_value_duration_info(extracted_dur_val);
 
@@ -192,8 +187,7 @@ static int test_expr_structs(void) {
     for (uint8_t op = 1; op <= 17; op++) {
         QkExprNode *expr = qk_expr_binary_new(op, v1Expr, v2Expr, &type_info);
         
-        QkBinaryExpr binary;
-        qk_expr_as_binary(expr, &binary);
+        QkBinaryExprInfo binary = qk_expr_binary_info(expr);
         
         if (binary.op != op) {
             fprintf(stderr, "Binary operator mismatch for op %u: expected %u, got %u\n",
@@ -232,8 +226,7 @@ static int test_expr_structs(void) {
     for (uint8_t op = 1; op <= 3; op++) {
         QkExprNode *expr = qk_expr_unary_new(op, v1Expr, &type_info);
         
-        QkUnaryExpr unary;
-        qk_expr_as_unary(expr, &unary);
+        QkUnaryExprInfo unary = qk_expr_unary_info(expr);
         
         if (unary.op != op) {
             fprintf(stderr, "Unary operator mismatch for op %u: expected %u, got %u\n",
@@ -273,8 +266,7 @@ static int test_expr_structs(void) {
     QkExprTypeInfo target_type = {QkExprType_Float, 0};
     QkExprNode *cast_expr = qk_expr_cast_new(v1Expr, &target_type);
     
-    QkCastExpr cast;
-    qk_expr_as_cast(cast_expr, &cast);
+    QkCastExprInfo cast = qk_expr_cast_info(cast_expr);
     
     if (cast.operand != v1Expr) {
         fprintf(stderr, "Cast operand mismatch: operand=%p (expected %p)\n",
@@ -306,8 +298,7 @@ static int test_expr_structs(void) {
     QkExprNode *index_val_expr = qk_value_as_expr(index_val);
     QkExprNode *index_expr = qk_expr_index_new(v1Expr, index_val_expr, &type_info);
     
-    QkIndexExpr index;
-    qk_expr_as_index(index_expr, &index);
+    QkIndexExprInfo index = qk_expr_index_info(index_expr);
     
     if (index.target != v1Expr) {
         fprintf(stderr, "Index target mismatch: target=%p (expected %p)\n",

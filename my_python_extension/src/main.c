@@ -22,61 +22,128 @@ void inspect_register(const QkClassicalRegister *creg, unsigned indent) {
 }
 
 void inspect_expr(const QkExprNode *expr_node, unsigned indent) {
-    // TODO: complete all the Expr inspection
     QkExprNodeKind kind = qk_expr_node_kind(expr_node);
     printf("%*sEXPR type: %s\n", indent, "", EXPR_KIND[kind]);
 
     switch (kind) {
-        case QkExprNodeKind_Binary:
-        {
-            QkBinaryExpr binary;
-            qk_expr_as_binary(expr_node, &binary);
+        case QkExprNodeKind_Unary:
+            QkUnaryExprInfo unary = qk_expr_unary_info(expr_node);
+            
+            printf("%*s UNARY: Op %d, Type %s, Const %d\n", indent, "", 
+                unary.op, 
+                EXPR_TYPE[unary.ty.ty], 
+                unary.constant);
 
-            printf("%*s BINARY: %d, %s, %d\n", indent, "", binary.op, EXPR_TYPE[binary.ty.ty], binary.constant);
+            inspect_expr(unary.operand, indent + 2);
+            break;
+        case QkExprNodeKind_Binary:
+            QkBinaryExprInfo binary = qk_expr_binary_info(expr_node);
+
+            printf("%*s BINARY: Op %d, Type %s, Const %d\n", indent, "", 
+                binary.op, 
+                EXPR_TYPE[binary.ty.ty], 
+                binary.constant);
             
             inspect_expr(binary.left, indent + 2);
             inspect_expr(binary.right, indent + 2);
-        }
-        break;
+            break;
+        case QkExprNodeKind_Cast:
+            QkCastExprInfo cast = qk_expr_cast_info(expr_node);
 
-        default:
+            printf("%*s CAST: Type %s, implicit %d, Const %d\n", indent, "", 
+                EXPR_TYPE[cast.ty.ty],
+                cast.implicit,
+                cast.constant);
             
+            inspect_expr(cast.operand, indent + 2);
+            break;
+        case QkExprNodeKind_Index:
+            QkIndexExprInfo index = qk_expr_index_info(expr_node);
+
+            printf("%*s INDEX: Type %s\n", indent, "", 
+                EXPR_TYPE[index.ty.ty]);
+
+            inspect_expr(index.target, indent + 2);
+            inspect_expr(index.index, indent + 2);
+
+            break;
+        case QkExprNodeKind_Value:
+            const QkValue *value = qk_expr_as_value(expr_node);
+            QkValueType value_type = qk_value_type(value);
+            
+            printf("%*s VALUE: Type %s, ", indent, "", EXPR_TYPE[value_type]);
+            switch (value_type) {
+                case QkValueType_Duration:
+                    QkDurationInfo duration_info = qk_value_duration_info(value);
+                    if (duration_info.ty == QkDurationType_Dt)
+                        printf("Dt %ld\n", duration_info.value.dt);
+                    else
+                        printf("%s %lf\n", DURATION_TYPE[duration_info.ty], duration_info.value.time);
+                    break;
+                case QkValueType_Float:
+                    double duration = qk_value_float(value);
+                    printf("%lf\n", duration);
+                    break;
+                case QkValueType_Uint:
+                    uint64_t val = qk_value_uint(value);
+                    printf("%ld\n", val);
+                    break; 
+            }
+
+            break;
+        case QkExprNodeKind_Var:
+            const QkVar *var = qk_expr_as_var(expr_node);
+            char* name = qk_var_name(var);
+            QkExprTypeInfo type_info = qk_var_type_info(var);
+            printf("%*s VAR: Name %s, Type %s", indent, "", 
+                name,
+                EXPR_TYPE[type_info.ty]);
+            if ( type_info.ty == QkExprType_Uint)
+                printf("(%d)\n", type_info.width);
+            else
+                printf("\n");
+            qk_str_free(name);
+            break;
+        case QkExprNodeKind_Stretch:
+            const QkStretch *stretch = qk_expr_as_stretch(expr_node);
+            name = qk_stretch_name(stretch);
+            printf("%*s STRETCH: Name %s\n", indent, "", name);
+            qk_str_free(name);
+            break;
     }
 }
 
 void inspect_condition(const QkControlFlowInstruction *cf_inst, unsigned indent) {
-    QkControlFlowKind cf_type = qk_control_flow_kind(cf_inst);    
+    QkControlFlowKind cf_type = qk_control_flow_kind(cf_inst);
+    
+    if ( cf_type != QkControlFlowKind_IfElse && cf_type != QkControlFlowKind_While)
+        return;
 
-    switch (cf_type) {
-        case QkControlFlowKind_IfElse:
-        case QkControlFlowKind_While:
-            QkConditionType condition_type = qk_control_flow_condition_type(cf_inst);
+    QkConditionType condition_type = qk_control_flow_condition_type(cf_inst);
 
-            printf("%*s condition type: %s\n", indent, "", CF_CONDITION_TYPE[condition_type]);
+    printf("%*s condition type: %s\n", indent, "", CF_CONDITION_TYPE[condition_type]);
 
-            if (condition_type == QkConditionType_Expr) { 
-                // const QkExprNode *expr = qk_control_flow_condition_expr(cf_inst);
-                // inspect_expr(expr, indent + 2);
-            } else if ( condition_type == QkConditionType_ClBit ) {
-                QkConditionBitInfo cond_bit;
-                qk_control_flow_condition_bit(cf_inst, &cond_bit);
+    switch (condition_type) {
+        case QkConditionType_ClBit:
+            QkConditionBitInfo cond_bit_info = qk_control_flow_condition_bit_info(cf_inst);
 
-                // inspect_register(cond_bit.creg, indent + 2);
-                printf("%*s BIT: %d COND: %d\n", indent + 2, "", 
-                    cond_bit.clbit,
-                    cond_bit.condition);
-            } else if ( condition_type == QkConditionType_ClReg ) {
-                QkConditionRegInfo cond_reg;
-                qk_control_flow_condition_register(cf_inst, &cond_reg);
-
-                inspect_register(cond_reg.creg, indent + 2);
-
-                printf("%*s COND: %ld\n", indent + 2, "", cond_reg.condition);
-            }
+            printf("%*s Bit: %d Condition: %d\n", indent + 2, "", 
+                cond_bit_info.clbit,
+                cond_bit_info.condition);
+            
             break;
-        case QkControlFlowKind_Box:
+        case QkConditionType_ClReg:
+            QkConditionRegInfo cond_reg_info = qk_control_flow_condition_reg_info(cf_inst);
+
+            inspect_register(cond_reg_info.creg, indent + 2);
+            printf("%*s COND: %ld\n", indent + 2, "", cond_reg_info.condition);
+
             break;
-        }
+        case QkConditionType_Expr:
+            const QkExprNode *expr = qk_control_flow_condition_expr(cf_inst);
+            inspect_expr(expr, indent + 2);
+            break;
+    }
 }
 
 void inspect_box(const QkControlFlowInstruction *cf_inst, unsigned indent) {
@@ -86,8 +153,7 @@ void inspect_box(const QkControlFlowInstruction *cf_inst, unsigned indent) {
         printf("%*s No Duration info\n", indent, "");
         break;
     case QkBoxDurationType_Duration: 
-        QkDurationInfo duration_info;
-        qk_control_flow_box_duration_info(cf_inst, &duration_info);
+        QkDurationInfo duration_info = qk_control_flow_box_duration_info(cf_inst);
         printf("%*s Duration type: %s Value: ", indent, "", DURATION_TYPE[duration_info.ty]);
         if (duration_info.ty == QkDurationType_Dt)
             printf("%ld\n", duration_info.value.dt);
